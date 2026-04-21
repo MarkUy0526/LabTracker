@@ -416,17 +416,81 @@ function enterInlineEdit(row, item) {
   currentEditItem = item;
 
   const borrowed = parseInt(item.available) !== parseInt(item.working_qty);
+
+  // Handle image column (cell 1) separately
+  const imageCell = row.cells[1];
+  if (imageCell) {
+    imageCell.innerHTML = '';
+    imageCell.style.verticalAlign = 'top';
+    imageCell.style.padding = '6px 8px';
+
+    const container = document.createElement('div');
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.gap = '6px';
+    container.style.alignItems = 'center';
+
+    // Show current image preview
+    const preview = document.createElement('div');
+    preview.id = 'imagePreview';
+    if (item.photo_url) {
+      preview.innerHTML = `<img src="${item.photo_url}" alt="Equipment" style="width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid var(--border);">`;
+    } else {
+      preview.innerHTML = `<div style="width:50px;height:50px;display:flex;align-items:center;justify-content:center;background:var(--surface-2);border-radius:4px;border:1px solid var(--border);color:var(--text-3);font-size:20px;">📷</div>`;
+    }
+
+    // File input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = 'equipmentImageInput';
+    fileInput.accept = 'image/*';
+    fileInput.style.display = 'none';
+    fileInput.dataset.field = 'equipmentImage';
+
+    // Upload button
+    const uploadBtn = document.createElement('button');
+    uploadBtn.type = 'button';
+    uploadBtn.textContent = 'Upload';
+    uploadBtn.style.cssText = `
+      padding:4px 10px;font-size:11px;
+      background:var(--accent);color:#fff;border:1px solid var(--accent);
+      border-radius:4px;cursor:pointer;font-weight:500;
+    `;
+    uploadBtn.onclick = (e) => {
+      e.preventDefault();
+      fileInput.click();
+    };
+
+    // Handle file selection
+    fileInput.onchange = function() {
+      if (this.files && this.files[0]) {
+        const file = this.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          preview.innerHTML = `<img src="${e.target.result}" alt="Equipment" style="width:50px;height:50px;object-fit:cover;border-radius:4px;border:1px solid var(--border);">`;
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+
+    container.appendChild(preview);
+    container.appendChild(uploadBtn);
+    container.appendChild(fileInput);
+    imageCell.appendChild(container);
+  }
+
+  // All other fields (shifted by 1 due to new image column)
   const fields = [
     [0, 'equipmentID',       'text',     item.equipment_id,    true],
-    [1, 'equipmentName',     'text',     item.equipment_name,  false],
-    [2, 'serialNumber',      'text',     item.serial_number,   false],
-    [3, 'internalSN',        'text',     item.internal_sn,     false],
-    [4, 'accountablePerson', 'text',     item.account_person,  false],
-    [5, 'totalQty',          'number',   item.total_qty,       borrowed],
-    [6, 'workingQty',        'number',   item.working_qty,     borrowed],
-    [7, 'notWorkingQty',     'number',   item.not_working_qty, borrowed],
-    [8, 'description',       'textarea', item.description,     false],
-    // cell 9 is the history button — leave intact
+    [2, 'equipmentName',     'text',     item.equipment_name,  false],
+    [3, 'serialNumber',      'text',     item.serial_number,   false],
+    [4, 'internalSN',        'text',     item.internal_sn,     false],
+    [5, 'accountablePerson', 'text',     item.account_person,  false],
+    [6, 'totalQty',          'number',   item.total_qty,       borrowed],
+    [7, 'workingQty',        'number',   item.working_qty,     borrowed],
+    [8, 'notWorkingQty',     'number',   item.not_working_qty, borrowed],
+    [9, 'description',       'textarea', item.description,     false],
+    // cell 10 is the history button — leave intact
   ];
 
   fields.forEach(([cellIdx, fieldName, type, value, dis]) => {
@@ -484,11 +548,29 @@ function saveInlineEdit() {
   const saveBtn = document.getElementById('inlineEditSaveBtn');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
 
+  // Create FormData to handle file uploads
+  const formData = new FormData();
+  formData.append('equipmentID', equipmentID);
+  formData.append('equipmentName', equipmentName);
+  formData.append('serialNumber', serialNumber);
+  formData.append('internalSN', internalSN);
+  formData.append('totalQty', totalQty);
+  formData.append('workingQty', workingQty);
+  formData.append('notWorkingQty', notWorkingQty);
+  formData.append('description', description);
+  formData.append('accountablePerson', accountablePerson);
+
+  // Add image file if selected
+  const imageInput = document.getElementById('equipmentImageInput');
+  if (imageInput && imageInput.files && imageInput.files[0]) {
+    formData.append('equipment_image', imageInput.files[0]);
+  }
+
   $.ajax({
     url: 'edit_equipment.php', method: 'POST',
-    // FIX: removed dataType:'json' — parse response manually to avoid error callback
-    data: { equipmentID, equipmentName, serialNumber, internalSN,
-            totalQty, workingQty, notWorkingQty, description, accountablePerson },
+    data: formData,
+    processData: false,
+    contentType: false,
     success: function(rawRes) {
       let res;
       try { res = typeof rawRes === 'string' ? JSON.parse(rawRes) : rawRes; }
@@ -516,7 +598,6 @@ function saveInlineEdit() {
       }
     },
     error: function(xhr) {
-      // FIX: show the actual server response in console so we can debug
       console.error('edit_equipment.php error:', xhr.status, xhr.responseText);
       alert('Save failed. Check console for details.');
       if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save changes'; }
@@ -844,6 +925,12 @@ function loadInventory() {
         row.title = 'Click to select, then click Edit — or double-click to edit directly';
         row.innerHTML = `
           <td>${item.equipment_id}</td>
+          <td style="text-align:center;">
+            ${item.photo_url
+              ? `<img src="${item.photo_url}" alt="Equipment" style="width:60px;height:60px;object-fit:cover;border-radius:4px;border:1px solid var(--border);">`
+              : `<div style="width:60px;height:60px;display:flex;align-items:center;justify-content:center;background:var(--surface-2);border-radius:4px;border:1px solid var(--border);color:var(--text-3);font-size:24px;">📷</div>`
+            }
+          </td>
           <td>${item.equipment_name}</td>
           <td>${item.serial_number  ?? ''}</td>
           <td>${item.internal_sn   ?? ''}</td>
@@ -892,10 +979,10 @@ function loadInventory() {
       const kw  = document.getElementById('searchInput')?.value.toLowerCase() || '';
       const map = { equipment:'e', measuring:'m', chemicals:'c', books:'b' };
       container.querySelectorAll('tr').forEach(r => {
-        if (!r.cells || r.cells.length < 8) return;
+        if (!r.cells || r.cells.length < 9) return;
         const id   = r.cells[0].textContent.trim();
-        const w    = parseInt(r.cells[6]?.textContent.trim(), 10);
-        const nw   = parseInt(r.cells[7]?.textContent.trim(), 10);
+        const w    = parseInt(r.cells[7]?.textContent.trim(), 10);
+        const nw   = parseInt(r.cells[8]?.textContent.trim(), 10);
         const text = r.textContent.toLowerCase();
         let show   = true;
         if (fv === 'working')         show = w  > 0;
@@ -905,7 +992,7 @@ function loadInventory() {
       });
     },
     error: function() {
-      container.innerHTML = '<tr><td colspan="10">Error loading inventory</td></tr>';
+      container.innerHTML = '<tr><td colspan="11">Error loading inventory</td></tr>';
     }
   });
 }
