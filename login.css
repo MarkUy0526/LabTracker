@@ -1,0 +1,135 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #e3f2fd;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+  }
+  
+  .login-container {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+    width: 300px;
+    text-align: center;
+  }
+  
+  .header {
+    background: #2e7d32;
+    color: white;
+    padding: 20px;
+    border-radius: 10px 10px 0 0;
+  }
+  
+  .header h1 {
+    margin: 0;
+    font-size: 24px;
+  }
+  
+  .header span {
+    font-weight: bold;
+  }
+  
+  .header h2 {
+    margin-bottom: 20px;
+  }
+  
+  .input-group {
+    margin-bottom: 15px;
+    text-align: left;
+  }
+  
+  label {
+    display: block;
+    font-weight: bold;
+  }
+  
+  input {
+    width: 94%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  
+  button {
+    width: 100%;
+    padding: 10px;
+    background: #388e3c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  button:hover {
+    background: #2e7d32;
+  }
+  
+  #error-message {
+    color: red;
+    margin-top: 10px;
+  }
+  
+  .guest-button {
+    margin-top: 5px;
+    background: #28a745;
+  }
+  
+  .guest-button:hover {
+    background: #218838;
+  }
+
+  #recent-guests-box {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 250px;
+    max-height: 300px;
+    background-color: #f9f9f9;
+    border: 2px solid #2e7d32;
+    border-radius: 8px;
+    padding: 10px;
+    overflow-y: auto;
+    box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    font-family: Arial, sans-serif;
+    z-index: 1000;
+  }
+
+  #recent-guests-box h3 {
+    margin-top: 0;
+    color: #2e7d32;
+    font-size: 18px;
+    text-align: center;
+  }
+
+  #recent-guests-list {
+    list-style-type: none;
+    padding-left: 5px;
+    margin: 0;
+  }
+
+  #recent-guests-list li {
+    margin-bottom: 6px;
+    padding: 6px;
+    border-bottom: 1px solid #ddd;
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+    font-weight: bold;
+  }
+
+  #recent-guests-list li.status-accepted {
+    color: green;
+  }
+
+  #recent-guests-list li.status-rejected {
+    color: red;
+  }
+
+  #recent-guests-list li.status-pending {
+    color: orange;
+  }
+  

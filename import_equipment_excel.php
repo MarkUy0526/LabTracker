@@ -1,0 +1,110 @@
+<?php
+require 'vendor/autoload.php';
+use PhpOffice\PhpSpreadsheet\IOFactory;
+
+header("Content-Type: application/json");
+include 'db.php';
+
+if (!isset($_FILES['excelFile']) || $_FILES['excelFile']['error'] !== UPLOAD_ERR_OK) {
+    echo json_encode(["success" => false, "message" => "Upload error."]);
+    exit;
+}
+
+$preview = isset($_POST['preview']) && $_POST['preview'] === '1';
+
+$spreadsheet = IOFactory::load($_FILES['excelFile']['tmp_name']);
+$sheet       = $spreadsheet->getActiveSheet();
+$rows        = $sheet->toArray(null, true, true, false);
+
+// Skip header row (index 0), collect data rows
+$dataRows = [];
+for ($i = 1; $i < count($rows); $i++) {
+    $r  = $rows[$i];
+    $id = trim((string)($r[0] ?? ''));
+    if ($id === '') continue;
+
+    $dataRows[] = [
+        'equipment_id'   => $id,
+        'equipment_name' => trim((string)($r[1] ?? '')),
+        'serial_number'  => trim((string)($r[2] ?? '')),
+        'internal_sn'    => trim((string)($r[3] ?? '')),
+        'account_person' => trim((string)($r[4] ?? '')),
+        'total_qty'      => (int)($r[5] ?? 0),
+        'working_qty'    => (int)($r[6] ?? 0),
+        'not_working_qty'=> (int)($r[7] ?? 0),
+        'description'    => trim((string)($r[8] ?? '')),
+    ];
+}
+
+if (count($dataRows) === 0) {
+    echo json_encode(["success" => false, "message" => "No valid rows found in the file."]);
+    exit;
+}
+
+// Check for duplicates against the DB
+$excelIds     = array_column($dataRows, 'equipment_id');
+$placeholders = implode(',', array_fill(0, count($excelIds), '?'));
+$types        = str_repeat('s', count($excelIds));
+
+$sql  = "SELECT equipment_id FROM equipment WHERE equipment_id IN ($placeholders)";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param($types, ...$excelIds);
+$stmt->execute();
+$result = $stmt->get_result();
+
+$existingIds = [];
+while ($row = $result->fetch_assoc()) {
+    $existingIds[] = $row['equipment_id'];
+}
+
+// Mark each row with its status for the preview
+foreach ($dataRows as &$row) {
+    $row['status'] = in_array($row['equipment_id'], $existingIds) ? 'duplicate' : 'new';
+}
+unset($row);
+
+// ── PREVIEW MODE — return rows without inserting ──
+if ($preview) {
+    echo json_encode([
+        "success"    => true,
+        "rows"       => $dataRows,
+        "duplicates" => $existingIds,
+        "new_count"  => count(array_filter($dataRows, fn($r) => $r['status'] === 'new')),
+        "dup_count"  => count($existingIds),
+    ]);
+    exit;
+}
+
+// ── IMPORT MODE — insert only new rows ──
+$newRows = array_filter($dataRows, fn($r) => $r['status'] === 'new');
+
+if (count($newRows) === 0) {
+    echo json_encode(["success" => false, "message" => "All rows already exist in the database."]);
+    exit;
+}
+
+$insertStmt = $conn->prepare("
+    INSERT INTO equipment
+    (equipment_id, equipment_name, serial_number, internal_sn, account_person,
+     total_qty, working_qty, not_working_qty, available, description)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+");
+
+$inserted = 0;
+foreach ($newRows as $r) {
+    $available = $r['working_qty'];
+    $insertStmt->bind_param(
+        "sssssiiiis",
+        $r['equipment_id'], $r['equipment_name'], $r['serial_number'], $r['internal_sn'],
+        $r['account_person'], $r['total_qty'], $r['working_qty'], $r['not_working_qty'],
+        $available, $r['description']
+    );
+    if ($insertStmt->execute()) $inserted++;
+}
+
+echo json_encode([
+    "success"      => true,
+    "inserted"     => $inserted,
+    "skipped_dups" => count($existingIds),
+    "message"      => "Imported $inserted item(s) successfully." . (count($existingIds) ? " Skipped " . count($existingIds) . " duplicate(s)." : ""),
+]);
