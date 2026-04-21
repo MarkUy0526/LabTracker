@@ -422,7 +422,7 @@ $slideImages = [
     </div>
 
     <div class="hero-text">
-      <p class="hero-label">Applied Physics Dept. TEST</p>
+      <p class="hero-label">Applied Physics Dept.</p>
       <h1 class="hero-title">
         Lab Equipment
         <span>Tracker.</span>
