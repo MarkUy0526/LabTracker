@@ -810,8 +810,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const confirmBtn = document.getElementById('confirmImportBtn');
-    confirmBtn.disabled = res.new_count === 0;
-    confirmBtn.title    = res.new_count === 0 ? 'All rows are duplicates — nothing to import.' : '';
+    confirmBtn.disabled = false;  // Always enable — we now update duplicates
+    confirmBtn.title    = '';
 
     modal.style.display = 'flex';
   }

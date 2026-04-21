@@ -75,36 +75,75 @@ if ($preview) {
     exit;
 }
 
-// ── IMPORT MODE — insert only new rows ──
-$newRows = array_filter($dataRows, fn($r) => $r['status'] === 'new');
-
-if (count($newRows) === 0) {
-    echo json_encode(["success" => false, "message" => "All rows already exist in the database."]);
-    exit;
-}
-
-$insertStmt = $conn->prepare("
-    INSERT INTO equipment
-    (equipment_id, equipment_name, serial_number, internal_sn, account_person,
-     total_qty, working_qty, not_working_qty, available, description)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-");
-
+// ── IMPORT MODE — insert new rows, UPDATE existing ones ──
 $inserted = 0;
-foreach ($newRows as $r) {
+$updated  = 0;
+
+foreach ($dataRows as $r) {
     $available = $r['working_qty'];
-    $insertStmt->bind_param(
-        "sssssiiiis",
-        $r['equipment_id'], $r['equipment_name'], $r['serial_number'], $r['internal_sn'],
-        $r['account_person'], $r['total_qty'], $r['working_qty'], $r['not_working_qty'],
-        $available, $r['description']
-    );
-    if ($insertStmt->execute()) $inserted++;
+
+    if (in_array($r['equipment_id'], $existingIds)) {
+        // Update existing equipment
+        // Only update description if it has a value
+        if ($r['description'] !== '') {
+            $updateStmt = $conn->prepare("
+                UPDATE equipment SET
+                    equipment_name = ?, serial_number = ?, internal_sn = ?,
+                    account_person = ?, total_qty = ?, working_qty = ?,
+                    not_working_qty = ?, available = ?, description = ?
+                WHERE equipment_id = ?
+            ");
+            $updateStmt->bind_param(
+                "ssssiiiiss",
+                $r['equipment_name'], $r['serial_number'], $r['internal_sn'],
+                $r['account_person'], $r['total_qty'], $r['working_qty'],
+                $r['not_working_qty'], $available, $r['description'], $r['equipment_id']
+            );
+        } else {
+            $updateStmt = $conn->prepare("
+                UPDATE equipment SET
+                    equipment_name = ?, serial_number = ?, internal_sn = ?,
+                    account_person = ?, total_qty = ?, working_qty = ?,
+                    not_working_qty = ?, available = ?
+                WHERE equipment_id = ?
+            ");
+            $updateStmt->bind_param(
+                "ssssiiiis",
+                $r['equipment_name'], $r['serial_number'], $r['internal_sn'],
+                $r['account_person'], $r['total_qty'], $r['working_qty'],
+                $r['not_working_qty'], $available, $r['equipment_id']
+            );
+        }
+        if ($updateStmt->execute()) $updated++;
+        $updateStmt->close();
+    } else {
+        // Insert new equipment
+        $insertStmt = $conn->prepare("
+            INSERT INTO equipment
+            (equipment_id, equipment_name, serial_number, internal_sn, account_person,
+             total_qty, working_qty, not_working_qty, available, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        $insertStmt->bind_param(
+            "sssssiiiis",
+            $r['equipment_id'], $r['equipment_name'], $r['serial_number'], $r['internal_sn'],
+            $r['account_person'], $r['total_qty'], $r['working_qty'], $r['not_working_qty'],
+            $available, $r['description']
+        );
+        if ($insertStmt->execute()) $inserted++;
+        $insertStmt->close();
+    }
 }
+
+$totalProcessed = $inserted + $updated;
+$message = "Processed $totalProcessed item(s).";
+if ($inserted > 0) $message .= " Inserted: $inserted.";
+if ($updated > 0) $message .= " Updated: $updated.";
 
 echo json_encode([
     "success"      => true,
     "inserted"     => $inserted,
-    "skipped_dups" => count($existingIds),
-    "message"      => "Imported $inserted item(s) successfully." . (count($existingIds) ? " Skipped " . count($existingIds) . " duplicate(s)." : ""),
+    "updated"      => $updated,
+    "message"      => $message,
 ]);
+?>
