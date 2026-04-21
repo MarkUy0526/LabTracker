@@ -527,6 +527,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
             <thead>
               <tr>
                 <th rowspan="2" class="small-column">ID</th>
+                <th rowspan="2" style="width:80px;text-align:center;">Image</th>
                 <th rowspan="2">Equipment</th>
                 <th rowspan="2">SN</th>
                 <th rowspan="2">ISN</th>
