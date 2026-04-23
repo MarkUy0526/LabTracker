@@ -736,8 +736,11 @@ session_start();
                     </tr>
                     <tr>
                         <td style="padding-top:30px;text-align:left;">
-                            <p>Approved by:<br><br>__________________________<br>
-                            <em>Instructor's Name and Signature</em></p>
+                            <p>Approved by:<br><br>
+                            <div style="width:180px;height:60px;border:1.5px dashed #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px;margin-bottom:8px;background:#fafafa;">e-signature here</div>
+                            __________________________<br>
+                            <em style="display:block;margin-top:4px;">Mr. Hiromi Rivas</em>
+                            <em style="display:block;">Applied Physics Professor</em></p>
                         </td>
                         <td style="text-align:right;padding-top:30px;">
                             <p>_________________________________<br>
