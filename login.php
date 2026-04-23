@@ -11,7 +11,7 @@ session_destroy();
    ════════════════════════════════════════════════════════════════ */
 $slideImages = [
     'images/anoto.jpg',
-    'images/menace.jpg',
+    'images/piece.jpg',
     'images/ackshwalli.jpg',
     'images/slide4.jpg',
     'images/slide5.jpg',
@@ -148,7 +148,7 @@ $slideImages = [
       width: 100%; height: 100%;
       object-fit: cover; object-position: center;
       display: block;
-      opacity: 0.20;
+      opacity: 0.50;
       -webkit-user-drag: none;
     }
 
