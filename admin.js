@@ -1264,22 +1264,21 @@ function initScheduleCharts() {
   }).catch(err => console.error('fetch_stats error:', err));
 }
 
-function loadTrendChart() {
-  function showTrendMessage(msg) {
-    if (trendChart) { trendChart.destroy(); trendChart = null; }
-    const canvas = document.getElementById('equipmentTrendChart');
-    if (!canvas) return;
-    const wrapper = canvas.parentElement;
-    wrapper.style.position = 'relative';
-    // Remove any existing message
-    wrapper.querySelectorAll('.trend-msg').forEach(el => el.remove());
-    const p = document.createElement('p');
-    p.className = 'trend-msg';
-    p.textContent = msg;
-    p.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;font-size:13px;color:var(--text-3);pointer-events:none;';
-    wrapper.appendChild(p);
-  }
+function showTrendMessage(msg) {
+  if (trendChart) { trendChart.destroy(); trendChart = null; }
+  const canvas = document.getElementById('equipmentTrendChart');
+  if (!canvas) return;
+  const wrapper = canvas.parentElement;
+  wrapper.style.position = 'relative';
+  wrapper.querySelectorAll('.trend-msg').forEach(el => el.remove());
+  const p = document.createElement('p');
+  p.className = 'trend-msg';
+  p.textContent = msg;
+  p.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;font-size:13px;color:var(--text-3);pointer-events:none;';
+  wrapper.appendChild(p);
+}
 
+function loadTrendChart() {
   if (trendFetchController) trendFetchController.abort();
   trendFetchController = new AbortController();
 
@@ -1298,7 +1297,7 @@ function loadTrendChart() {
     .then(r => r.json())
     .then(data => {
       if (!data.success) {
-        showTrendMessage('No data for selected range');
+        showTrendMessage(data.message || 'Failed to load chart data');
         return;
       }
 
