@@ -1173,6 +1173,7 @@ document.addEventListener('DOMContentLoaded', function() {
 let calendar;
 let chartsInitialized = false;
 let trendChart = null;
+let trendFetchController = null;
 
 function initCalendar() {
   const calendarEl = document.getElementById('calendar');
@@ -1264,32 +1265,55 @@ function initScheduleCharts() {
 }
 
 function loadTrendChart() {
+  function showTrendMessage(msg) {
+    if (trendChart) { trendChart.destroy(); trendChart = null; }
+    const canvas = document.getElementById('equipmentTrendChart');
+    if (!canvas) return;
+    const wrapper = canvas.parentElement;
+    wrapper.style.position = 'relative';
+    // Remove any existing message
+    wrapper.querySelectorAll('.trend-msg').forEach(el => el.remove());
+    const p = document.createElement('p');
+    p.className = 'trend-msg';
+    p.textContent = msg;
+    p.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;font-size:13px;color:var(--text-3);pointer-events:none;';
+    wrapper.appendChild(p);
+  }
+
+  if (trendFetchController) trendFetchController.abort();
+  trendFetchController = new AbortController();
+
   const from   = document.getElementById('trendFrom')?.value;
   const to     = document.getElementById('trendTo')?.value;
   const status = document.getElementById('trendStatus')?.value ?? 'All';
 
   if (!from || !to) return;
 
-  fetch(`fetch_daily_borrow_trend.php?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&status=${encodeURIComponent(status)}`)
+  if (from > to) {
+    showTrendMessage('"From" date must not be after "To" date');
+    return;
+  }
+
+  fetch(`fetch_daily_borrow_trend.php?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&status=${encodeURIComponent(status)}`, { signal: trendFetchController.signal })
     .then(r => r.json())
     .then(data => {
-      if (!data.success) return;
+      if (!data.success) {
+        showTrendMessage('No data for selected range');
+        return;
+      }
+
+      if (!data.labels.length) {
+        showTrendMessage('No data for selected range');
+        return;
+      }
+
+      const canvas = document.getElementById('equipmentTrendChart');
+      if (canvas) canvas.parentElement.querySelectorAll('.trend-msg').forEach(el => el.remove());
 
       if (trendChart) { trendChart.destroy(); trendChart = null; }
 
       const ctx = document.getElementById('equipmentTrendChart')?.getContext('2d');
       if (!ctx) return;
-
-      if (!data.labels.length) {
-        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        ctx.save();
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--text-3') || '#64748b';
-        ctx.font = '13px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('No data for selected range', ctx.canvas.width / 2, ctx.canvas.height / 2);
-        ctx.restore();
-        return;
-      }
 
       trendChart = new Chart(ctx, {
         type: 'line',
@@ -1302,7 +1326,7 @@ function loadTrendChart() {
             backgroundColor: 'rgba(99,102,241,0.08)',
             tension: 0.3,
             pointRadius: 3,
-            fill: true,
+            fill: true
           }]
         },
         options: {
@@ -1322,7 +1346,10 @@ function loadTrendChart() {
         }
       });
     })
-    .catch(err => console.error('loadTrendChart error:', err));
+    .catch(err => {
+      if (err.name === 'AbortError') return;
+      console.error('loadTrendChart error:', err);
+    });
 }
 
 
