@@ -634,16 +634,16 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
             <p style="font-size:13px;font-weight:600;margin:0;">Monthly Borrowing Trend</p>
             <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;">
               <div>
-                <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:3px;">From</label>
+                <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:4px;">From</label>
                 <input type="date" id="trendFrom" style="font-family:var(--font);font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text-1);outline:none;">
               </div>
-              <div style="padding-bottom:7px;color:var(--text-3);">→</div>
+              <div style="padding-bottom:7px;color:var(--text-3);">&rarr;</div>
               <div>
-                <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:3px;">To</label>
+                <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:4px;">To</label>
                 <input type="date" id="trendTo" style="font-family:var(--font);font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text-1);outline:none;">
               </div>
               <div>
-                <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:3px;">Status</label>
+                <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:4px;">Status</label>
                 <select id="trendStatus" style="font-family:var(--font);font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text-1);outline:none;">
                   <option value="All">All</option>
                   <option value="Accepted">Accepted</option>
@@ -651,7 +651,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
                   <option value="Rejected">Rejected</option>
                 </select>
               </div>
-              <button id="trendFilterBtn" style="font-family:var(--font);font-size:12px;padding:6px 14px;border:1px solid var(--accent);border-radius:4px;background:var(--accent);color:#fff;cursor:pointer;">Filter</button>
+              <button id="trendFilterBtn" class="primary" style="background:var(--accent);color:#fff;border-color:var(--accent);font-size:12px;">Filter</button>
             </div>
           </div>
           <div style="height:280px;"><canvas id="equipmentTrendChart" height="280"></canvas></div>
