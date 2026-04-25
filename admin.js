@@ -1316,10 +1316,10 @@ function loadTrendChart() {
 
       const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
       const statusColors = {
-        All:      { border: '#6366f1',            bg: 'rgba(99,102,241,0.08)' },
-        Accepted: { border: cssVar('--accent'),   bg: cssVar('--accent-soft') },
-        Pending:  { border: cssVar('--warn'),     bg: cssVar('--warn-soft')   },
-        Rejected: { border: cssVar('--danger'),   bg: cssVar('--danger-soft') },
+        All:      { border: cssVar('--chart-default'), bg: cssVar('--chart-default-soft') },
+        Accepted: { border: cssVar('--accent'),       bg: cssVar('--accent-soft')        },
+        Pending:  { border: cssVar('--warn'),         bg: cssVar('--warn-soft')          },
+        Rejected: { border: cssVar('--danger'),       bg: cssVar('--danger-soft')        },
       };
       const color = statusColors[status] ?? statusColors.All;
 
