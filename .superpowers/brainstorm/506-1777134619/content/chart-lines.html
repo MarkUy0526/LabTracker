@@ -1,0 +1,27 @@
+<h2>What should each line in the chart represent?</h2>
+<p class="subtitle">The chart will show days of the selected month on the X-axis. We need to decide what data each line tracks.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>One line per equipment</h3>
+      <p>Each piece of equipment gets its own colored line. Day 1 might show: Microscope = 3, Centrifuge = 1, etc. Good for spotting which equipment is in demand on specific days.</p>
+      <div style="margin-top:10px; padding:10px; background:#1e293b; border-radius:6px; font-size:12px; font-family:monospace; color:#94a3b8;">
+        X: 1, 2, 3 ... 30 (days)<br>
+        Lines: Microscope, Centrifuge, Pipette, ...
+      </div>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Single line — total borrows per day</h3>
+      <p>One line showing the total number of borrow requests across all equipment per day. Cleaner and easier to read — great for spotting overall lab activity trends.</p>
+      <div style="margin-top:10px; padding:10px; background:#1e293b; border-radius:6px; font-size:12px; font-family:monospace; color:#94a3b8;">
+        X: 1, 2, 3 ... 30 (days)<br>
+        Line: Total requests (all equipment combined)
+      </div>
+    </div>
+  </div>
+</div>

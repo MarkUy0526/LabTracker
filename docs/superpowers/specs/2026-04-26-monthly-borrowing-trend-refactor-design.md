@@ -94,7 +94,7 @@ function loadTrendChart() {
   - Otherwise: create new Chart.js line chart
       type: 'line'
       labels: response.labels
-      datasets: [{ data: response.counts, borderColor: accent color, tension: 0.3 }]
+      datasets: [{ data: response.counts, borderColor: '#6366f1' (var(--accent)), tension: 0.3 }]
       scales.y: beginAtZero, stepSize 1, title "No. of Requests"
 }
 ```
