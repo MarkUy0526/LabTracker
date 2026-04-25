@@ -12,6 +12,18 @@ if (!$from || !$to) {
     exit;
 }
 
+$fromDt = DateTime::createFromFormat('Y-m-d', $from);
+$toDt   = DateTime::createFromFormat('Y-m-d', $to);
+if (!$fromDt || !$toDt) {
+    echo json_encode(['success' => false, 'message' => 'from and to must be YYYY-MM-DD']);
+    exit;
+}
+
+if ($fromDt > $toDt) {
+    echo json_encode(['success' => false, 'message' => '"from" must not be after "to"']);
+    exit;
+}
+
 $allowed = ['All', 'Accepted', 'Pending', 'Rejected'];
 if (!in_array($status, $allowed)) {
     echo json_encode(['success' => false, 'message' => 'Invalid status']);
@@ -25,6 +37,10 @@ if ($status === 'All') {
             GROUP BY day
             ORDER BY day";
     $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'message' => 'Query preparation failed']);
+        exit;
+    }
     $stmt->bind_param('ss', $from, $to);
 } else {
     $sql = "SELECT DATE(date) AS day, COUNT(*) AS count
@@ -34,6 +50,10 @@ if ($status === 'All') {
             GROUP BY day
             ORDER BY day";
     $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        echo json_encode(['success' => false, 'message' => 'Query preparation failed']);
+        exit;
+    }
     $stmt->bind_param('sss', $from, $to, $status);
 }
 
@@ -48,8 +68,8 @@ while ($row = $result->fetch_assoc()) {
 $labels = [];
 $counts = [];
 
-$current = new DateTime($from);
-$end     = new DateTime($to);
+$current = $fromDt;
+$end     = $toDt;
 
 while ($current <= $end) {
     $dateKey  = $current->format('Y-m-d');
@@ -63,4 +83,3 @@ echo json_encode([
     'labels'  => $labels,
     'counts'  => $counts,
 ]);
-?>
