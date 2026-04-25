@@ -1314,6 +1314,15 @@ function loadTrendChart() {
       const ctx = document.getElementById('equipmentTrendChart')?.getContext('2d');
       if (!ctx) return;
 
+      const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      const statusColors = {
+        All:      { border: '#6366f1',            bg: 'rgba(99,102,241,0.08)' },
+        Accepted: { border: cssVar('--accent'),   bg: cssVar('--accent-soft') },
+        Pending:  { border: cssVar('--warn'),     bg: cssVar('--warn-soft')   },
+        Rejected: { border: cssVar('--danger'),   bg: cssVar('--danger-soft') },
+      };
+      const color = statusColors[status] ?? statusColors.All;
+
       trendChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -1321,8 +1330,8 @@ function loadTrendChart() {
           datasets: [{
             label: 'Borrow Requests',
             data: data.counts,
-            borderColor: '#6366f1',
-            backgroundColor: 'rgba(99,102,241,0.08)',
+            borderColor: color.border,
+            backgroundColor: color.bg,
             tension: 0.3,
             pointRadius: 3,
             fill: true
