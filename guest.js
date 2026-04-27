@@ -1,6 +1,53 @@
 let allEquipmentData  = [];
 let selectedEquipment = [];
 
+// ════════════════════════════════════════════════════════════════
+// REAL-TIME REQUIRED FIELD INDICATOR (asterisk visibility)
+// ════════════════════════════════════════════════════════════════
+function initializeRequiredIndicators() {
+    const fieldConfigs = [
+        { inputs: ['lastName', 'firstName', 'middleInitial'], indicator: 'borrowerRequired' },
+        { inputs: ['studentID'], indicator: 'studentIdRequired' },
+        { inputs: ['subjectCode'], indicator: 'subjectCodeRequired' },
+        { inputs: ['usageDate'], indicator: 'usageDateRequired' },
+        { inputs: ['departmentSelect'], indicator: 'departmentRequired' },
+        { inputs: ['roomSelect', 'roomCustomInput'], indicator: 'roomRequired' },
+        { inputs: ['instructorName', 'instructorCustomInput'], indicator: 'instructorRequired' }
+    ];
+
+    function updateIndicator(config) {
+        const indicator = document.getElementById(config.indicator);
+        if (!indicator) return;
+
+        const allFilled = config.inputs.every(inputId => {
+            const element = document.getElementById(inputId);
+            if (!element) return true;
+            const value = element.value ? element.value.trim() : '';
+            const isHidden = element.classList && element.classList.contains('hidden-input');
+            return (value.length > 0) || isHidden;
+        });
+
+        if (allFilled && config.inputs.some(id => document.getElementById(id)?.value?.trim())) {
+            indicator.classList.add('hidden');
+        } else {
+            indicator.classList.remove('hidden');
+        }
+    }
+
+    fieldConfigs.forEach(config => {
+        config.inputs.forEach(inputId => {
+            const element = document.getElementById(inputId);
+            if (element) {
+                element.addEventListener('input', () => updateIndicator(config));
+                element.addEventListener('change', () => updateIndicator(config));
+            }
+        });
+    });
+
+    // Initial check
+    fieldConfigs.forEach(updateIndicator);
+}
+
 // ════════════════════════════════════════════════
 // RULES MODAL — 2-slide, scroll-to-reveal agree
 // ════════════════════════════════════════════════
@@ -128,8 +175,18 @@ function openReviewModal() {
     const studentID   = document.getElementById('studentID').value.trim();
     const subjectCode = document.getElementById('subjectCode').value.trim();
     const usageDate   = document.getElementById('usageDate').value;
-    const room        = document.getElementById('roomSelect').value;
-    const instructor  = document.getElementById('instructorName').value;
+    const roomCustom  = document.getElementById('roomCustomInput');
+    const roomSelect  = document.getElementById('roomSelect');
+    // Get room value from either custom input or select
+    const room = (roomCustom && roomCustom.classList.contains('show'))
+        ? roomCustom.value.trim()
+        : roomSelect.value;
+    const instructorCustom = document.getElementById('instructorCustomInput');
+    const instructorSelect = document.getElementById('instructorName');
+    // Get instructor value from either custom input or select
+    const instructor = (instructorCustom && instructorCustom.classList.contains('show'))
+        ? instructorCustom.value.trim()
+        : instructorSelect.value;
     const hasEquip    = $('#equipmentListInForm tr').length > 0;
 
     if (!studentID || !subjectCode || !usageDate || !room || !instructor) {
@@ -562,3 +619,204 @@ function showEquipment() {
 }
 
 window.logout = function () { window.location.href = 'logout.php'; };
+
+// ════════════════════════════════════════════════════════════════
+// DEPARTMENT-ROOM CONDITIONAL SELECT LOGIC
+// ════════════════════════════════════════════════════════════════
+
+// Department to Room Mapping
+const DEPARTMENT_ROOM_MAP = {
+    'CAS': ['Room 407', 'Room 411'],
+    'Engineering': ['Lab A', 'Lab B', 'Lab C'],
+    'Science': ['Room 201', 'Room 202', 'Room 203'],
+    'Business': ['Room 501', 'Room 502'],
+    'Others': null  // Triggers text input instead of select
+};
+
+function initDepartmentRoomSelect() {
+    const deptSelect = document.getElementById('departmentSelect');
+    const roomSelect = document.getElementById('roomSelect');
+    const roomCustom = document.getElementById('roomCustomInput');
+
+    if (!deptSelect || !roomSelect) return;
+
+    // Populate department select with options
+    Object.keys(DEPARTMENT_ROOM_MAP).forEach(dept => {
+        const option = document.createElement('option');
+        option.value = dept;
+        option.textContent = dept;
+        deptSelect.appendChild(option);
+    });
+
+    // Handle department change
+    deptSelect.addEventListener('change', function () {
+        const selectedDept = this.value;
+
+        if (!selectedDept) {
+            // Department cleared
+            roomSelect.disabled = true;
+            roomSelect.value = '';
+            roomSelect.classList.remove('hidden-input');
+            roomSelect.innerHTML = '<option value="" disabled selected>Select a department first</option>';
+            roomCustom.classList.remove('show');
+            roomCustom.value = '';
+            roomCustom.disabled = true;
+            return;
+        }
+
+        const rooms = DEPARTMENT_ROOM_MAP[selectedDept];
+
+        if (selectedDept === 'Others') {
+            // Show custom text input for "Others"
+            roomSelect.classList.add('hidden-input');
+            roomSelect.disabled = true;
+            roomCustom.classList.add('show');
+            roomCustom.disabled = false;
+            roomCustom.value = '';
+            roomCustom.focus();
+        } else {
+            // Show room select with options
+            roomSelect.classList.remove('hidden-input');
+            roomSelect.disabled = false;
+            roomCustom.classList.remove('show');
+            roomCustom.disabled = true;
+            roomCustom.value = '';
+
+            // Populate room options
+            roomSelect.innerHTML = '<option value="" disabled selected>Select a room</option>';
+            if (rooms && Array.isArray(rooms)) {
+                rooms.forEach(room => {
+                    const option = document.createElement('option');
+                    option.value = room;
+                    option.textContent = room;
+                    roomSelect.appendChild(option);
+                });
+            }
+        }
+    });
+
+    // Handle room select change (for form submission)
+    roomSelect.addEventListener('change', function () {
+        // Update indicator
+        const indicator = document.getElementById('roomRequired');
+        if (indicator && this.value) {
+            indicator.classList.add('hidden');
+        } else if (indicator) {
+            indicator.classList.remove('hidden');
+        }
+    });
+
+    // Sync roomCustomInput to roomSelect for form submission
+    roomCustom.addEventListener('input', function () {
+        roomSelect.value = this.value;
+        // Update indicator
+        const indicator = document.getElementById('roomRequired');
+        if (indicator && this.value) {
+            indicator.classList.add('hidden');
+        } else if (indicator) {
+            indicator.classList.remove('hidden');
+        }
+    });
+
+    // Allow switching back from custom input to select by pressing Escape
+    roomCustom.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            deptSelect.value = '';
+            roomSelect.classList.remove('hidden-input');
+            roomSelect.disabled = true;
+            roomSelect.value = '';
+            roomSelect.innerHTML = '<option value="" disabled selected>Select a department first</option>';
+            roomCustom.classList.remove('show');
+            roomCustom.disabled = true;
+            roomCustom.value = '';
+            deptSelect.focus();
+        }
+    });
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    initializeRequiredIndicators();
+    initDepartmentRoomSelect();
+    initInstructorSelect();
+});
+
+// Also initialize if DOM is already ready
+if (document.readyState !== 'loading') {
+    initializeRequiredIndicators();
+    initDepartmentRoomSelect();
+    initInstructorSelect();
+}
+
+// ════════════════════════════════════════════════════════════════
+// INSTRUCTOR SELECT WITH CUSTOM INPUT (for "Other" option)
+// ════════════════════════════════════════════════════════════════
+
+function initInstructorSelect() {
+    const instructorSelect = document.getElementById('instructorName');
+    const instructorCustom = document.getElementById('instructorCustomInput');
+
+    if (!instructorSelect || !instructorCustom) return;
+
+    // Add "Other" option if it doesn't exist
+    const otherOption = Array.from(instructorSelect.options).find(opt => opt.value === 'Other');
+    if (!otherOption) {
+        const option = document.createElement('option');
+        option.value = 'Other';
+        option.textContent = 'Other';
+        instructorSelect.appendChild(option);
+    }
+
+    // Handle instructor select change
+    instructorSelect.addEventListener('change', function () {
+        const selectedValue = this.value;
+
+        if (selectedValue === 'Other') {
+            // Show custom text input, hide select
+            instructorSelect.classList.add('hidden-input');
+            instructorCustom.classList.add('show');
+            instructorCustom.disabled = false;
+            instructorCustom.value = '';
+            instructorCustom.focus();
+        } else if (selectedValue) {
+            // Regular selection - show select, hide custom input
+            instructorSelect.classList.remove('hidden-input');
+            instructorCustom.classList.remove('show');
+            instructorCustom.disabled = true;
+            instructorCustom.value = '';
+        } else {
+            // No selection - show both
+            instructorSelect.classList.remove('hidden-input');
+            instructorCustom.classList.remove('show');
+            instructorCustom.disabled = true;
+            instructorCustom.value = '';
+        }
+    });
+
+    // Allow switching back from custom input to select by clearing it
+    instructorCustom.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            instructorSelect.value = '';
+            instructorSelect.classList.remove('hidden-input');
+            instructorCustom.classList.remove('show');
+            instructorCustom.disabled = true;
+            instructorCustom.value = '';
+            instructorSelect.focus();
+        }
+    });
+
+    // Sync custom input to select for form submission
+    instructorCustom.addEventListener('input', function () {
+        instructorSelect.value = this.value;
+    });
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    initInstructorSelect();
+});
+
+// Also initialize if DOM is already ready
+if (document.readyState !== 'loading') {
+    initInstructorSelect();
+}
