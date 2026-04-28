@@ -620,25 +620,37 @@ function showEquipment() {
 
 window.logout = function () { window.location.href = 'logout.php'; };
 
+
 // ════════════════════════════════════════════════════════════════
-// DEPARTMENT-ROOM CONDITIONAL SELECT LOGIC
+// DEPARTMENT-LINKED SELECTS (Room & Instructor)
 // ════════════════════════════════════════════════════════════════
 
 // Department to Room Mapping
 const DEPARTMENT_ROOM_MAP = {
-    'CAS': ['Room 407', 'Room 411'],
-    'Engineering': ['Lab A', 'Lab B', 'Lab C'],
-    'Science': ['Room 201', 'Room 202', 'Room 203'],
-    'Business': ['Room 501', 'Room 502'],
+    'Applied Physics': ['407','409'],
+    'Mathematics': ['401'],
+    'General Education': ['401', '407', '409', '412'],
+    'Psychology': ['412'],
     'Others': null  // Triggers text input instead of select
 };
 
-function initDepartmentRoomSelect() {
+// Department to Instructor Mapping
+const DEPARTMENT_INSTRUCTOR_MAP = {
+    'Applied Physics': ['Mr. Lester D. Bernardino', 'Dr. Raymund B. Bolalin', 'Mr. Hiromi Rivas', 'Mr. Reenier R. Ledesma'],
+    'Mathematics': ['Prof. Larex B. Tagalog', 'Dr. Roel P. Balayan', 'Dr. Jayson D. Tolentino', 'Mr. Raynard C. Redondo', 'Mr. Mark Ronoele R. Gonzalvo' ,'Mr. Joneil G. Pontejos', 'Mr. Eleazar B. Bernales'],
+    'General Education': ['Dr. Joseph T. Moraca', 'Prof. Romeo B. Capucao Jr.', 'Prof. Nerissa B. Capili', 'Prof. Dennis D. Mangubat', 'Dr. Carlito C. Biares', 'Mrs. Rosario U. Tanuecoz', 'Dr. Eugune S. Abdon', 'Mr. Ricky G. Tebang'],
+    'Psychology': ['Dr. Jinamarlyn B. Doctor', 'Dr. Lourdes P. Jusay', 'Prof. Ruth Lareza A. Morales', 'Dr. Rosei O. Cipriano', 'Prof. Myrtle P. Macam', 'Ms. Jazmine B Lasam'],
+    'Others': null  // Triggers text input instead of select
+};
+
+function initDepartmentLinkedSelects() {
     const deptSelect = document.getElementById('departmentSelect');
     const roomSelect = document.getElementById('roomSelect');
     const roomCustom = document.getElementById('roomCustomInput');
+    const instSelect = document.getElementById('instructorName');
+    const instCustom = document.getElementById('instructorCustomInput');
 
-    if (!deptSelect || !roomSelect) return;
+    if (!deptSelect || !roomSelect || !instSelect) return;
 
     // Populate department select with options
     Object.keys(DEPARTMENT_ROOM_MAP).forEach(dept => {
@@ -648,175 +660,139 @@ function initDepartmentRoomSelect() {
         deptSelect.appendChild(option);
     });
 
-    // Handle department change
+    // Handle department change - affects both room and instructor
     deptSelect.addEventListener('change', function () {
         const selectedDept = this.value;
 
         if (!selectedDept) {
-            // Department cleared
-            roomSelect.disabled = true;
-            roomSelect.value = '';
-            roomSelect.classList.remove('hidden-input');
-            roomSelect.innerHTML = '<option value="" disabled selected>Select a department first</option>';
-            roomCustom.classList.remove('show');
-            roomCustom.value = '';
-            roomCustom.disabled = true;
+            // Department cleared - disable and clear both
+            disableAndClearSelect(roomSelect, roomCustom, 'Select a department first');
+            disableAndClearSelect(instSelect, instCustom, 'Select a department first');
             return;
         }
 
-        const rooms = DEPARTMENT_ROOM_MAP[selectedDept];
+        // Update room select
+        updateDependentSelect(selectedDept, roomSelect, roomCustom, DEPARTMENT_ROOM_MAP, 'a room');
 
-        if (selectedDept === 'Others') {
-            // Show custom text input for "Others"
-            roomSelect.classList.add('hidden-input');
-            roomSelect.disabled = true;
-            roomCustom.classList.add('show');
-            roomCustom.disabled = false;
-            roomCustom.value = '';
-            roomCustom.focus();
-        } else {
-            // Show room select with options
-            roomSelect.classList.remove('hidden-input');
-            roomSelect.disabled = false;
-            roomCustom.classList.remove('show');
-            roomCustom.disabled = true;
-            roomCustom.value = '';
-
-            // Populate room options
-            roomSelect.innerHTML = '<option value="" disabled selected>Select a room</option>';
-            if (rooms && Array.isArray(rooms)) {
-                rooms.forEach(room => {
-                    const option = document.createElement('option');
-                    option.value = room;
-                    option.textContent = room;
-                    roomSelect.appendChild(option);
-                });
-            }
-        }
+        // Update instructor select
+        updateDependentSelect(selectedDept, instSelect, instCustom, DEPARTMENT_INSTRUCTOR_MAP, 'an instructor');
     });
 
-    // Handle room select change (for form submission)
+    // Handle room select change
     roomSelect.addEventListener('change', function () {
-        // Update indicator
-        const indicator = document.getElementById('roomRequired');
-        if (indicator && this.value) {
-            indicator.classList.add('hidden');
-        } else if (indicator) {
-            indicator.classList.remove('hidden');
-        }
+        roomCustom.value = this.value;
+        updateRequiredIndicator('roomRequired', this.value);
     });
 
-    // Sync roomCustomInput to roomSelect for form submission
+    // Handle custom room input
     roomCustom.addEventListener('input', function () {
         roomSelect.value = this.value;
-        // Update indicator
-        const indicator = document.getElementById('roomRequired');
-        if (indicator && this.value) {
-            indicator.classList.add('hidden');
-        } else if (indicator) {
-            indicator.classList.remove('hidden');
-        }
+        updateRequiredIndicator('roomRequired', this.value);
     });
 
-    // Allow switching back from custom input to select by pressing Escape
+    // Allow switching back from custom input to room select by pressing Escape
     roomCustom.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
             deptSelect.value = '';
-            roomSelect.classList.remove('hidden-input');
-            roomSelect.disabled = true;
-            roomSelect.value = '';
-            roomSelect.innerHTML = '<option value="" disabled selected>Select a department first</option>';
-            roomCustom.classList.remove('show');
-            roomCustom.disabled = true;
-            roomCustom.value = '';
+            disableAndClearSelect(roomSelect, roomCustom, 'Select a department first');
+            disableAndClearSelect(instSelect, instCustom, 'Select a department first');
+            deptSelect.focus();
+        }
+    });
+
+    // Handle instructor select change
+    instSelect.addEventListener('change', function () {
+        instCustom.value = this.value;
+        updateRequiredIndicator('instructorRequired', this.value);
+    });
+
+    // Handle custom instructor input
+    instCustom.addEventListener('input', function () {
+        instSelect.value = this.value;
+        updateRequiredIndicator('instructorRequired', this.value);
+    });
+
+    // Allow switching back from custom input to instructor select by pressing Escape
+    instCustom.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            deptSelect.value = '';
+            disableAndClearSelect(roomSelect, roomCustom, 'Select a department first');
+            disableAndClearSelect(instSelect, instCustom, 'Select a department first');
             deptSelect.focus();
         }
     });
 }
 
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
-    initializeRequiredIndicators();
-    initDepartmentRoomSelect();
-    initInstructorSelect();
-});
-
-// Also initialize if DOM is already ready
-if (document.readyState !== 'loading') {
-    initializeRequiredIndicators();
-    initDepartmentRoomSelect();
-    initInstructorSelect();
-}
-
-// ════════════════════════════════════════════════════════════════
-// INSTRUCTOR SELECT WITH CUSTOM INPUT (for "Other" option)
-// ════════════════════════════════════════════════════════════════
-
-function initInstructorSelect() {
-    const instructorSelect = document.getElementById('instructorName');
-    const instructorCustom = document.getElementById('instructorCustomInput');
-
-    if (!instructorSelect || !instructorCustom) return;
-
-    // Add "Other" option if it doesn't exist
-    const otherOption = Array.from(instructorSelect.options).find(opt => opt.value === 'Other');
-    if (!otherOption) {
-        const option = document.createElement('option');
-        option.value = 'Other';
-        option.textContent = 'Other';
-        instructorSelect.appendChild(option);
+// Helper: Disable and clear a dependent select
+function disableAndClearSelect(selectEl, customEl, placeholder) {
+    selectEl.disabled = true;
+    selectEl.value = '';
+    selectEl.style.display = 'block';
+    selectEl.innerHTML = `<option value="" disabled selected>${placeholder}</option>`;
+    if (customEl) {
+        customEl.classList.remove('show');
+        customEl.value = '';
+        customEl.disabled = true;
     }
+}
 
-    // Handle instructor select change
-    instructorSelect.addEventListener('change', function () {
-        const selectedValue = this.value;
+// Helper: Update dependent select based on department
+function updateDependentSelect(dept, selectEl, customEl, dataMap, fieldLabel) {
+    const options = dataMap[dept];
 
-        if (selectedValue === 'Other') {
-            // Show custom text input, hide select
-            instructorSelect.classList.add('hidden-input');
-            instructorCustom.classList.add('show');
-            instructorCustom.disabled = false;
-            instructorCustom.value = '';
-            instructorCustom.focus();
-        } else if (selectedValue) {
-            // Regular selection - show select, hide custom input
-            instructorSelect.classList.remove('hidden-input');
-            instructorCustom.classList.remove('show');
-            instructorCustom.disabled = true;
-            instructorCustom.value = '';
+    if (dept === 'Others') {
+        // Show custom text input
+        selectEl.style.display = 'none';
+        selectEl.disabled = true;
+        if (customEl) {
+            customEl.classList.add('show');
+            customEl.disabled = false;
+            customEl.value = '';
+            customEl.focus();
+        }
+    } else {
+        // Show select with options
+        selectEl.style.display = 'block';
+        selectEl.disabled = false;
+        if (customEl) {
+            customEl.classList.remove('show');
+            customEl.disabled = true;
+            customEl.value = '';
+        }
+
+        // Populate options
+        selectEl.innerHTML = `<option value="" disabled selected>Select ${fieldLabel}</option>`;
+        if (options && Array.isArray(options)) {
+            options.forEach(option => {
+                const optElement = document.createElement('option');
+                optElement.value = option;
+                optElement.textContent = option;
+                selectEl.appendChild(optElement);
+            });
+        }
+    }
+}
+
+// Helper: Update required indicator
+function updateRequiredIndicator(indicatorId, value) {
+    const indicator = document.getElementById(indicatorId);
+    if (indicator) {
+        if (value) {
+            indicator.classList.add('hidden');
         } else {
-            // No selection - show both
-            instructorSelect.classList.remove('hidden-input');
-            instructorCustom.classList.remove('show');
-            instructorCustom.disabled = true;
-            instructorCustom.value = '';
+            indicator.classList.remove('hidden');
         }
-    });
-
-    // Allow switching back from custom input to select by clearing it
-    instructorCustom.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') {
-            instructorSelect.value = '';
-            instructorSelect.classList.remove('hidden-input');
-            instructorCustom.classList.remove('show');
-            instructorCustom.disabled = true;
-            instructorCustom.value = '';
-            instructorSelect.focus();
-        }
-    });
-
-    // Sync custom input to select for form submission
-    instructorCustom.addEventListener('input', function () {
-        instructorSelect.value = this.value;
-    });
+    }
 }
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
-    initInstructorSelect();
+    initializeRequiredIndicators();
+    initDepartmentLinkedSelects();
 });
 
 // Also initialize if DOM is already ready
 if (document.readyState !== 'loading') {
-    initInstructorSelect();
+    initializeRequiredIndicators();
+    initDepartmentLinkedSelects();
 }

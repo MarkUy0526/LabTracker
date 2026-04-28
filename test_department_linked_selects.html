@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Department-Linked Selects Test</title>
+    <style>
+        :root {
+            --accent: #2d9d78;
+            --accent-soft: rgba(45, 157, 120, 0.12);
+            --border: #dcdcdc;
+            --surface: #fff;
+            --surface-2: #f5f5f5;
+            --text-1: #1a1a18;
+            --text-2: #3a3a38;
+            --text-3: #79796e;
+            --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
+            --transition: 0.28s ease;
+            --radius: 8px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font);
+            background: var(--surface-2);
+            padding: 40px 20px;
+            color: var(--text-1);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--surface);
+            padding: 30px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: var(--text-3);
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .info-box {
+            background: var(--accent-soft);
+            border-left: 3px solid var(--accent);
+            padding: 12px 16px;
+            border-radius: var(--radius);
+            margin-bottom: 24px;
+            font-size: 13px;
+            color: var(--text-2);
+            line-height: 1.6;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-3);
+            margin-bottom: 8px;
+        }
+
+        select, input[type="text"] {
+            width: 100%;
+            padding: 10px 12px;
+            font-family: var(--font);
+            font-size: 14px;
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface);
+            color: var(--text-1);
+            transition: border-color 0.28s ease, opacity 0.28s ease, background-color 0.28s ease, color 0.28s ease;
+        }
+
+        select:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+
+        select:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: var(--surface-2);
+            color: var(--text-3);
+            border-color: var(--border);
+        }
+
+        select:not(:disabled) {
+            cursor: pointer;
+            border-color: var(--accent);
+        }
+
+        input[type="text"] {
+            display: none;
+        }
+
+        input[type="text"].show {
+            display: block;
+        }
+
+        input[type="text"]:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        @media (max-width: 600px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        @media (max-width: 600px) {
+            .status-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .status-box {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px;
+        }
+
+        .status-label {
+            color: var(--text-3);
+            font-weight: 600;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 6px;
+        }
+
+        .status-value {
+            color: var(--accent);
+            font-weight: 600;
+            font-size: 14px;
+            word-break: break-word;
+        }
+
+        .feature-list {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-top: 24px;
+        }
+
+        .feature-list h3 {
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: var(--text-1);
+        }
+
+        .feature-list ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-list li {
+            font-size: 13px;
+            color: var(--text-2);
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feature-list li:before {
+            content: "✓ ";
+            color: var(--accent);
+            font-weight: bold;
+            margin-right: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>🔗 Department-Linked Selects Test</h1>
+            <p class="subtitle">Test the synchronized room & instructor selection based on department</p>
+
+            <div class="info-box">
+                <strong>How it works:</strong><br>
+                1️⃣ Select a department to enable both Room and Instructor selects<br>
+                2️⃣ Each department has specific rooms and instructors<br>
+                3️⃣ Select "Others" to enter custom text for either field<br>
+                4️⃣ Clear the department to reset both fields
+            </div>
+
+            <form id="testForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="departmentSelect">Department *</label>
+                        <select id="departmentSelect">
+                            <option value="" disabled selected>Select a department</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="roomSelect">Room *</label>
+                        <select id="roomSelect" disabled>
+                            <option value="" disabled selected>Select a department first</option>
+                        </select>
+                        <input type="text" id="roomCustomInput" placeholder="Enter your room">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="instructorSelect">Instructor *</label>
+                        <select id="instructorSelect" disabled>
+                            <option value="" disabled selected>Select a department first</option>
+                        </select>
+                        <input type="text" id="instructorCustomInput" placeholder="Enter instructor name">
+                    </div>
+                </div>
+            </form>
+
+            <div class="status-grid">
+                <div class="status-box">
+                    <div class="status-label">Department</div>
+                    <div class="status-value" id="statusDept">Not selected</div>
+                </div>
+                <div class="status-box">
+                    <div class="status-label">Room</div>
+                    <div class="status-value" id="statusRoom">Not selected</div>
+                </div>
+                <div class="status-box">
+                    <div class="status-label">Instructor</div>
+                    <div class="status-value" id="statusInstructor">Not selected</div>
+                </div>
+            </div>
+
+            <div class="feature-list">
+                <h3>Implemented Features</h3>
+                <ul>
+                    <li>Department-dependent room selection</li>
+                    <li>Department-dependent instructor selection</li>
+                    <li>Synchronized enabling/disabling of both fields</li>
+                    <li>Custom text input for "Others" department</li>
+                    <li>Smooth transitions (0.28s) on state changes</li>
+                    <li>Subtle border color changes (accent color when enabled)</li>
+                    <li>Required field indicators</li>
+                    <li>Auto-focus on custom input when selected</li>
+                    <li>Escape key to reset department and both fields</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Department-to-Rooms & Instructors Mapping</h3>
+            <div id="mappingInfo" style="font-size: 13px; color: var(--text-2); line-height: 1.7;"></div>
+        </div>
+    </div>
+
+    <script>
+        // Department to Room Mapping
+        const DEPARTMENT_ROOM_MAP = {
+            'CAS': ['Room 407', 'Room 411'],
+            'Engineering': ['Lab A', 'Lab B', 'Lab C'],
+            'Science': ['Room 201', 'Room 202', 'Room 203'],
+            'Business': ['Room 501', 'Room 502'],
+            'Others': null  // Triggers text input instead of select
+        };
+
+        // Department to Instructor Mapping
+        const DEPARTMENT_INSTRUCTOR_MAP = {
+            'CAS': ['Dr. Juan Santos', 'Prof. Maria Garcia', 'Dr. Carlos Reyes'],
+            'Engineering': ['Engr. Antonio Cruz', 'Prof. Luz Fernandez', 'Engr. Roberto Silva'],
+            'Science': ['Dr. Rosa Lopez', 'Prof. Miguel Torres', 'Dr. Elena Martinez'],
+            'Business': ['Prof. Ana Gonzales', 'Dr. Jose Rivera', 'Prof. Carmen Morales'],
+            'Others': null  // Triggers text input instead of select
+        };
+
+        function initDepartmentLinkedSelects() {
+            const deptSelect = document.getElementById('departmentSelect');
+            const roomSelect = document.getElementById('roomSelect');
+            const roomCustom = document.getElementById('roomCustomInput');
+            const instSelect = document.getElementById('instructorSelect');
+            const instCustom = document.getElementById('instructorCustomInput');
+
+            if (!deptSelect || !roomSelect || !instSelect) return;
+
+            // Populate department select with options
+            Object.keys(DEPARTMENT_ROOM_MAP).forEach(dept => {
+                const option = document.createElement('option');
+                option.value = dept;
+                option.textContent = dept;
+                deptSelect.appendChild(option);
+            });
+
+            // Display mapping info
+            displayMappingInfo();
+
+            // Handle department change - affects both room and instructor
+            deptSelect.addEventListener('change', function () {
+                const selectedDept = this.value;
+
+                if (!selectedDept) {
+                    // Department cleared - disable and clear both
+                    disableAndClearSelect(roomSelect, roomCustom, 'Select a department first');
+                    disableAndClearSelect(instSelect, instCustom, 'Select a department first');
+                    updateStatus();
+                    return;
+                }
+
+                // Update room select
+                updateDependentSelect(selectedDept, roomSelect, roomCustom, DEPARTMENT_ROOM_MAP, 'a room');
+
+                // Update instructor select
+                updateDependentSelect(selectedDept, instSelect, instCustom, DEPARTMENT_INSTRUCTOR_MAP, 'an instructor');
+
+                updateStatus();
+            });
+
+            // Handle room select change
+            roomSelect.addEventListener('change', function () {
+                roomCustom.value = this.value;
+                updateStatus();
+            });
+
+            // Handle custom room input
+            roomCustom.addEventListener('input', function () {
+                roomSelect.value = this.value;
+                updateStatus();
+            });
+
+            // Handle instructor select change
+            instSelect.addEventListener('change', function () {
+                instCustom.value = this.value;
+                updateStatus();
+            });
+
+            // Handle custom instructor input
+            instCustom.addEventListener('input', function () {
+                instSelect.value = this.value;
+                updateStatus();
+            });
+
+            // Escape key to reset
+            [roomCustom, instCustom].forEach(el => {
+                el.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape') {
+                        deptSelect.value = '';
+                        disableAndClearSelect(roomSelect, roomCustom, 'Select a department first');
+                        disableAndClearSelect(instSelect, instCustom, 'Select a department first');
+                        deptSelect.focus();
+                        updateStatus();
+                    }
+                });
+            });
+        }
+
+        function disableAndClearSelect(selectEl, customEl, placeholder) {
+            selectEl.disabled = true;
+            selectEl.value = '';
+            selectEl.style.display = 'block';
+            selectEl.innerHTML = `<option value="" disabled selected>${placeholder}</option>`;
+            if (customEl) {
+                customEl.classList.remove('show');
+                customEl.value = '';
+                customEl.disabled = true;
+            }
+        }
+
+        function updateDependentSelect(dept, selectEl, customEl, dataMap, fieldLabel) {
+            const options = dataMap[dept];
+
+            if (dept === 'Others') {
+                // Show custom text input
+                selectEl.style.display = 'none';
+                selectEl.disabled = true;
+                if (customEl) {
+                    customEl.classList.add('show');
+                    customEl.disabled = false;
+                    customEl.value = '';
+                    customEl.focus();
+                }
+            } else {
+                // Show select with options
+                selectEl.style.display = 'block';
+                selectEl.disabled = false;
+                if (customEl) {
+                    customEl.classList.remove('show');
+                    customEl.disabled = true;
+                    customEl.value = '';
+                }
+
+                // Populate options
+                selectEl.innerHTML = `<option value="" disabled selected>Select ${fieldLabel}</option>`;
+                if (options && Array.isArray(options)) {
+                    options.forEach(option => {
+                        const optElement = document.createElement('option');
+                        optElement.value = option;
+                        optElement.textContent = option;
+                        selectEl.appendChild(optElement);
+                    });
+                }
+            }
+        }
+
+        function updateStatus() {
+            const deptSelect = document.getElementById('departmentSelect');
+            const roomSelect = document.getElementById('roomSelect');
+            const roomCustom = document.getElementById('roomCustomInput');
+            const instSelect = document.getElementById('instructorSelect');
+            const instCustom = document.getElementById('instructorCustomInput');
+
+            const dept = deptSelect.value || 'Not selected';
+            const room = (roomCustom.classList.contains('show') ? roomCustom.value : roomSelect.value) || 'Not selected';
+            const instructor = (instCustom.classList.contains('show') ? instCustom.value : instSelect.value) || 'Not selected';
+
+            document.getElementById('statusDept').textContent = dept;
+            document.getElementById('statusRoom').textContent = room;
+            document.getElementById('statusInstructor').textContent = instructor;
+        }
+
+        function displayMappingInfo() {
+            const container = document.getElementById('mappingInfo');
+            let html = '';
+
+            Object.entries(DEPARTMENT_ROOM_MAP).forEach(([dept, rooms]) => {
+                const instructors = DEPARTMENT_INSTRUCTOR_MAP[dept];
+                const roomsText = dept === 'Others' ? 'Custom input' : rooms.join(', ');
+                const instText = dept === 'Others' ? 'Custom input' : instructors.join(', ');
+
+                html += `<p><strong>${dept}:</strong><br>`;
+                html += `  📍 Rooms: ${roomsText}<br>`;
+                html += `  👨‍🏫 Instructors: ${instText}</p>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', initDepartmentLinkedSelects);
+
+        // Also initialize if DOM is already ready
+        if (document.readyState !== 'loading') {
+            initDepartmentLinkedSelects();
+        }
+    </script>
+</body>
+</html>

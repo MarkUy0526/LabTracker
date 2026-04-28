@@ -560,6 +560,43 @@ session_start();
             cursor: not-allowed;
         }
 
+        /* ═══ DEPARTMENT-INSTRUCTOR CONDITIONAL SELECT ═══ */
+        #instructorName {
+            transition: border-color 0.28s ease, opacity 0.28s ease, background-color 0.28s ease, color 0.28s ease;
+            cursor: pointer;
+        }
+        #instructorName:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: var(--surface-2);
+            color: var(--text-3);
+            border-color: var(--border);
+        }
+        #instructorName:not(:disabled) {
+            opacity: 1;
+            border-color: var(--accent);
+        }
+        #instructorName:not(:disabled):hover {
+            background-color: var(--surface-2);
+        }
+        #instructorName:not(:disabled):focus {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+        /* Custom text input for "Others" instructor */
+        #instructorCustomInput {
+            transition: border-color 0.28s ease, opacity 0.28s ease;
+            display: none;
+            width: 200px;
+        }
+        #instructorCustomInput.show {
+            display: inline-block;
+        }
+        #instructorCustomInput:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
         /* Custom text input for "Other" instructor */
         #instructorCustomInput {
             transition: border-color 0.28s ease, opacity 0.28s ease;
@@ -778,8 +815,8 @@ session_start();
                         <td style="padding:5px;text-align:left;">
                             <strong>Instructor's Name: <span class="required-indicator" id="instructorRequired">*</span></strong>
                             <div id="instructorInputsContainer">
-                                <select id="instructorName" style="width:200px;">
-                                    <option value="" disabled selected>Select Instructor</option>
+                                <select id="instructorName" style="width:200px;" disabled>
+                                    <option value="" disabled selected>Select a department first</option>
                                 </select>
                                 <input type="text" id="instructorCustomInput" placeholder="Enter instructor name" style="width:200px;">
                             </div>
