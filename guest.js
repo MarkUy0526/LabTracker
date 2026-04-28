@@ -627,9 +627,9 @@ window.logout = function () { window.location.href = 'logout.php'; };
 
 // Department to Room Mapping
 const DEPARTMENT_ROOM_MAP = {
-    'Applied Physics': ['407','409'],
+    'Applied Physics': ['407','414'],
     'Mathematics': ['401'],
-    'General Education': ['401', '407', '409', '412'],
+    'General Education': ['401', '407', '412','414'],
     'Psychology': ['412'],
     'Others': null  // Triggers text input instead of select
 };
