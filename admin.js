@@ -1172,6 +1172,8 @@ document.addEventListener('DOMContentLoaded', function() {
 // ════════════════════════════════════════════════════════════════
 let calendar;
 let chartsInitialized = false;
+let trendChart = null;
+let trendFetchController = null;
 
 function initCalendar() {
   const calendarEl = document.getElementById('calendar');
@@ -1245,23 +1247,117 @@ function initScheduleCharts() {
     pie('weeklyChart',  'Weekly Requests',  w.accepted, w.rejected);
     pie('monthlyChart', 'Monthly Requests', m.accepted, m.rejected);
 
-    if (data.equipmentTrend && Object.keys(data.equipmentTrend).length) {
+    const now       = new Date();
+    const firstDay  = new Date(now.getFullYear(), now.getMonth(), 1);
+    const pad       = n => String(n).padStart(2, '0');
+    const fmtDate   = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+
+    const fromEl    = document.getElementById('trendFrom');
+    const toEl      = document.getElementById('trendTo');
+    const filterBtn = document.getElementById('trendFilterBtn');
+
+    if (fromEl) fromEl.value = fmtDate(firstDay);
+    if (toEl)   toEl.value   = fmtDate(now);
+
+    if (filterBtn) filterBtn.addEventListener('click', loadTrendChart);
+    loadTrendChart();
+  }).catch(err => console.error('fetch_stats error:', err));
+}
+
+function showTrendMessage(msg) {
+  if (trendChart) { trendChart.destroy(); trendChart = null; }
+  const canvas = document.getElementById('equipmentTrendChart');
+  if (!canvas) return;
+  const wrapper = canvas.parentElement;
+  wrapper.style.position = 'relative';
+  wrapper.querySelectorAll('.trend-msg').forEach(el => el.remove());
+  const p = document.createElement('p');
+  p.className = 'trend-msg';
+  p.textContent = msg;
+  p.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;font-size:13px;color:var(--text-3);pointer-events:none;';
+  wrapper.appendChild(p);
+}
+
+function loadTrendChart() {
+  if (trendFetchController) trendFetchController.abort();
+  trendFetchController = new AbortController();
+
+  const from   = document.getElementById('trendFrom')?.value;
+  const to     = document.getElementById('trendTo')?.value;
+  const status = document.getElementById('trendStatus')?.value ?? 'All';
+
+  if (!from || !to) return;
+
+  if (from > to) {
+    showTrendMessage('"From" date must not be after "To" date');
+    return;
+  }
+
+  fetch(`fetch_daily_borrow_trend.php?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&status=${encodeURIComponent(status)}`, { signal: trendFetchController.signal })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.success) {
+        showTrendMessage(data.message || 'Failed to load chart data');
+        return;
+      }
+
+      if (!data.labels.length) {
+        showTrendMessage('No data for selected range');
+        return;
+      }
+
+      const canvas = document.getElementById('equipmentTrendChart');
+      if (canvas) canvas.parentElement.querySelectorAll('.trend-msg').forEach(el => el.remove());
+
+      if (trendChart) { trendChart.destroy(); trendChart = null; }
+
       const ctx = document.getElementById('equipmentTrendChart')?.getContext('2d');
       if (!ctx) return;
-      const months   = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      const datasets = Object.entries(data.equipmentTrend).map(([item, vals], i) => ({
-        label: item, data: months.map(mo => vals[mo] || 0),
-        borderColor: `hsl(${i*45},70%,50%)`, backgroundColor:'transparent', tension:0.3
-      }));
-      new Chart(ctx, {
-        type: 'line', data: { labels:months, datasets },
-        options: { responsive:true, maintainAspectRatio:false,
-          plugins: { title:{ display:true, text:'Monthly Borrowing Frequency' }, legend:{ position:'top' } },
-          scales:  { y:{ beginAtZero:true, ticks:{ stepSize:1, precision:0 }, title:{ display:true, text:'Times Borrowed' } } }
+
+      const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      const statusColors = {
+        All:      { border: cssVar('--chart-default'), bg: cssVar('--chart-default-soft') },
+        Accepted: { border: cssVar('--accent'),       bg: cssVar('--accent-soft')        },
+        Pending:  { border: cssVar('--warn'),         bg: cssVar('--warn-soft')          },
+        Rejected: { border: cssVar('--danger'),       bg: cssVar('--danger-soft')        },
+      };
+      const color = statusColors[status] ?? statusColors.All;
+
+      trendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: data.labels,
+          datasets: [{
+            label: 'Borrow Requests',
+            data: data.counts,
+            borderColor: color.border,
+            backgroundColor: color.bg,
+            tension: 0.3,
+            pointRadius: 3,
+            fill: true
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+          },
+          scales: {
+            x: { ticks: { maxTicksLimit: 15, maxRotation: 45, font: { size: 11 } } },
+            y: {
+              beginAtZero: true,
+              ticks: { stepSize: 1, precision: 0 },
+              title: { display: true, text: 'No. of Requests' }
+            }
+          }
         }
       });
-    }
-  }).catch(err => console.error('fetch_stats error:', err));
+    })
+    .catch(err => {
+      if (err.name === 'AbortError') return;
+      console.error('loadTrendChart error:', err);
+    });
 }
 
 

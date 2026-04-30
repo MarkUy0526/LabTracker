@@ -19,6 +19,8 @@ html {
   --danger-soft:#FDECEA;
   --warn:      #E67E22;
   --warn-soft: #FEF3E2;
+  --chart-default:      #6366f1;
+  --chart-default-soft: rgba(99,102,241,0.08);
   --text-1:    #1A1A18;
   --text-2:    #5C5C52;
   --text-3:    #9C9C8C;

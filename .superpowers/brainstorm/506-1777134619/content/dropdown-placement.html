@@ -1,0 +1,71 @@
+<h2>Where should the month dropdown appear?</h2>
+<p class="subtitle">Three layout options for placing the month selector inside the chart card.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup" style="padding:0;">
+        <div class="mockup-header">Chart Card</div>
+        <div class="mockup-body" style="padding:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-weight:600;font-size:13px;color:#e2e8f0;">Monthly Borrowing Trend</span>
+            <select style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:3px 8px;font-size:12px;">
+              <option>April 2025</option>
+            </select>
+          </div>
+          <div class="placeholder" style="height:100px;margin:0;">Chart area</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Inline with title</h3>
+      <p>Title on the left, dropdown on the right. Compact, saves vertical space.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup" style="padding:0;">
+        <div class="mockup-header">Chart Card</div>
+        <div class="mockup-body" style="padding:12px;">
+          <p style="font-weight:600;font-size:13px;color:#e2e8f0;margin-bottom:8px;">Monthly Borrowing Trend</p>
+          <div style="margin-bottom:10px;">
+            <label style="font-size:11px;color:#64748b;display:block;margin-bottom:3px;">Select Month</label>
+            <select style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:3px 8px;font-size:12px;width:160px;">
+              <option>April 2025</option>
+            </select>
+          </div>
+          <div class="placeholder" style="height:80px;margin:0;">Chart area</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Below title, above chart</h3>
+      <p>Dropdown sits between the title and the chart. Clear visual hierarchy.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup" style="padding:0;">
+        <div class="mockup-header">Chart Card</div>
+        <div class="mockup-body" style="padding:12px;">
+          <p style="font-weight:600;font-size:13px;color:#e2e8f0;margin-bottom:10px;">Monthly Borrowing Trend</p>
+          <div class="placeholder" style="height:80px;margin:0 0 10px;">Chart area</div>
+          <div style="text-align:center;">
+            <label style="font-size:11px;color:#64748b;margin-right:6px;">Month:</label>
+            <select style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:3px 8px;font-size:12px;">
+              <option>April 2025</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Below the chart</h3>
+      <p>Dropdown sits under the chart, centered. Chart stays prominent at the top.</p>
+    </div>
+  </div>
+
+</div>

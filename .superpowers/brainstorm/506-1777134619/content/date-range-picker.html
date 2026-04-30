@@ -1,0 +1,91 @@
+<h2>What kind of date range picker?</h2>
+<p class="subtitle">The chart X-axis will show each day in the selected range. Pick the style that fits best.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup" style="padding:0;">
+        <div class="mockup-header">Chart Card</div>
+        <div class="mockup-body" style="padding:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-weight:600;font-size:13px;color:#e2e8f0;">Monthly Borrowing Trend</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <input type="date" value="2025-04-01" style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:3px 6px;font-size:11px;">
+              <span style="color:#64748b;font-size:12px;">→</span>
+              <input type="date" value="2025-04-30" style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:3px 6px;font-size:11px;">
+            </div>
+          </div>
+          <div class="placeholder" style="height:100px;margin:0;">Chart area (days Apr 1–30 on X-axis)</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Two date inputs (From / To)</h3>
+      <p>Simple From and To date fields inline with the title. Can span any range — days, weeks, or months. Defaults to the current full month on load.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Maximum flexibility</li><li>No extra library</li><li>Native browser UI</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Can span across many months, making X-axis crowded</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup" style="padding:0;">
+        <div class="mockup-header">Chart Card</div>
+        <div class="mockup-body" style="padding:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-weight:600;font-size:13px;color:#e2e8f0;">Monthly Borrowing Trend</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <select style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:3px 8px;font-size:11px;">
+                <option>April 2025</option><option>March 2025</option>
+              </select>
+              <span style="color:#64748b;font-size:11px;">Day</span>
+              <input type="number" value="1" min="1" max="30" style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:3px 5px;font-size:11px;width:44px;">
+              <span style="color:#64748b;font-size:12px;">→</span>
+              <input type="number" value="30" min="1" max="30" style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:3px 5px;font-size:11px;width:44px;">
+            </div>
+          </div>
+          <div class="placeholder" style="height:100px;margin:0;">Chart area (days 1–30 on X-axis)</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Month picker + day range</h3>
+      <p>A month dropdown plus start/end day number inputs. Range is always within one month. X-axis stays clean and predictable (max 31 points).</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>X-axis never gets crowded</li><li>Clear "within a month" framing</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Can't span across month boundaries</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup" style="padding:0;">
+        <div class="mockup-header">Chart Card</div>
+        <div class="mockup-body" style="padding:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-weight:600;font-size:13px;color:#e2e8f0;">Monthly Borrowing Trend</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <button style="background:#1e293b;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;">‹ Mar</button>
+              <span style="color:#e2e8f0;font-size:12px;font-weight:600;">April 2025</span>
+              <button style="background:#1e293b;color:#64748b;border:1px solid #334155;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;">May ›</button>
+            </div>
+          </div>
+          <div class="placeholder" style="height:100px;margin:0;">Chart area (all days of April on X-axis)</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Prev / Next month arrows</h3>
+      <p>Always shows a full month. Navigate with arrow buttons. Defaults to current month. Next arrow is disabled for future months.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Cleanest UI — one click to navigate</li><li>Always a full month view</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>No sub-month range selection</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>

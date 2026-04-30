@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "PowerShell(& \"C:\\\\xampp\\\\php\\\\php.exe\" -l \"C:\\\\Users\\\\User\\\\Desktop\\\\dev\\\\LabTracker\\\\fetch_daily_borrow_trend.php\")",
+      "Bash(git commit *)",
+      "Bash(php *)",
+      "PowerShell(php -l \"C:\\\\Users\\\\User\\\\Desktop\\\\dev\\\\LabTracker\\\\fetch_daily_borrow_trend.php\")",
+      "Bash(git -C \"C:\\\\Users\\\\User\\\\Desktop\\\\dev\\\\LabTracker\" log --oneline --follow -- fetch_stats.php)",
+      "Bash(git *)",
+      "Bash(cp \"C:/Users/User/Desktop/dev/LabTracker/fetch_daily_borrow_trend.php\" \"C:/xampp/htdocs/LabTracker/fetch_daily_borrow_trend.php\")",
+      "Bash(cp \"C:/Users/User/Desktop/dev/LabTracker/admin.php\" \"C:/xampp/htdocs/LabTracker/admin.php\")",
+      "Bash(cp \"C:/Users/User/Desktop/dev/LabTracker/admin.js\" \"C:/xampp/htdocs/LabTracker/admin.js\")"
+    ]
+  }
+}
