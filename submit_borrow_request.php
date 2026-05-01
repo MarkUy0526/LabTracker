@@ -13,16 +13,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $guestNumber = $data['guestNumber'];
-    $date = $data['date'];
-    $borrowerName = $data['borrowerName'];
-    $instructorName = $data['instructorName'];
-    $studentID = $data['studentID'];
-    $subjectCode = $data['subjectCode'];
-    $usageDate = $data['usageDate'];
-    $department = $data['department'];
-    $room = $data['room'];
-    $equipmentList = $data['equipmentList'];
+    $guestNumber = $data['guestNumber'] ?? '';
+    $date = $data['date'] ?? '';
+    $borrowerName = $data['borrowerName'] ?? '';
+    $instructorName = $data['instructorName'] ?? '';
+    $studentID = $data['studentID'] ?? '';
+    $subjectCode = $data['subjectCode'] ?? '';
+    $usageDate = $data['usageDate'] ?? '';
+    $department = $data['department'] ?? '';
+    $room = $data['room'] ?? '';
+    $equipmentList = $data['equipmentList'] ?? [];
 
     $conn->begin_transaction();
 
@@ -71,8 +71,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode(['success' => true, 'message' => 'Borrow request submitted successfully.']);
     } catch (Exception $e) {
         $conn->rollback();
-
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        error_log('Borrow request error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
     }
 } else {
     echo json_encode(['success' => false, 'message' => 'Invalid request method']);
