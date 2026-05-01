@@ -20,16 +20,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $studentID = $data['studentID'];
     $subjectCode = $data['subjectCode'];
     $usageDate = $data['usageDate'];
+    $department = $data['department'];
     $room = $data['room'];
     $equipmentList = $data['equipmentList'];
 
     $conn->begin_transaction();
 
     try {
-        $stmt = $conn->prepare("INSERT INTO borrow_requests 
-            (guest_number, date, borrower_name, instructor_name, student_id, subject_code, usage_date, room) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("ssssssss", $guestNumber, $date, $borrowerName, $instructorName, $studentID, $subjectCode, $usageDate, $room);
+        $stmt = $conn->prepare("INSERT INTO borrow_requests
+            (guest_number, date, borrower_name, instructor_name, student_id, subject_code, usage_date, department, room)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("sssssssss", $guestNumber, $date, $borrowerName, $instructorName, $studentID, $subjectCode, $usageDate, $department, $room);
 
         if (!$stmt->execute()) {
             throw new Exception('Failed to insert borrower data: ' . $stmt->error);

@@ -175,6 +175,7 @@ function openReviewModal() {
     const studentID   = document.getElementById('studentID').value.trim();
     const subjectCode = document.getElementById('subjectCode').value.trim();
     const usageDate   = document.getElementById('usageDate').value;
+    const department  = document.getElementById('departmentSelect').value;
     const roomCustom  = document.getElementById('roomCustomInput');
     const roomSelect  = document.getElementById('roomSelect');
     // Get room value from either custom input or select
@@ -189,8 +190,8 @@ function openReviewModal() {
         : instructorSelect.value;
     const hasEquip    = $('#equipmentListInForm tr').length > 0;
 
-    if (!studentID || !subjectCode || !usageDate || !room || !instructor) {
-        alert('Please fill out all fields before continuing, including selecting a room and instructor.');
+    if (!studentID || !subjectCode || !usageDate || !department || !room || !instructor) {
+        alert('Please fill out all fields before continuing, including selecting a department, room and instructor.');
         return;
     }
     if (!hasEquip) {
@@ -205,6 +206,7 @@ function openReviewModal() {
     document.getElementById('rv-instructor').textContent = instructor;
     document.getElementById('rv-student-id').textContent = studentID;
     document.getElementById('rv-subject').textContent    = subjectCode;
+    document.getElementById('rv-department').textContent = department;
     document.getElementById('rv-room').textContent       = room;
 
     const uParts = usageDate.split('-');
@@ -548,6 +550,7 @@ function submitBorrowRequest() {
         studentID:      $('#studentID').val(),
         subjectCode:    $('#subjectCode').val(),
         usageDate:      $('#usageDate').val(),
+        department:     $('#departmentSelect').val(),
         room:           $('#roomSelect').val(),
         equipmentList:  []
     };

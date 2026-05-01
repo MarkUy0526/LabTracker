@@ -1517,7 +1517,8 @@ function loadBorrowRequests() {
               <tr><td><strong>Guest Login Number:</strong> ${request.guest_number}</td><td><strong>Date:</strong> ${formatDateToDDMMYYYY(request.date)}</td></tr>
               <tr><td><strong>Borrower's Name:</strong> ${request.borrower_name}</td><td><strong>Instructor's Name:</strong> ${request.instructor_name}</td></tr>
               <tr><td><strong>Student ID:</strong> ${request.student_id}</td><td><strong>Subject Code:</strong> ${request.subject_code}</td></tr>
-              <tr><td><strong>Date(s) of Usage:</strong> ${formatDateToDDMMYYYY(request.usage_date)}</td><td><strong>Room:</strong> ${request.room}</td></tr>
+              <tr><td><strong>Department:</strong> ${request.department || '—'}</td><td><strong>Date(s) of Usage:</strong> ${formatDateToDDMMYYYY(request.usage_date)}</td></tr>
+              <tr><td colspan="2"><strong>Room:</strong> ${request.room}</td></tr>
               <tr><td colspan="2" style="padding-top:15px;">
                 <table style="width:100%;border-collapse:collapse;" border="1">
                   <thead><tr style="text-align:center;"><th>Equipment / Material</th><th>Quantity</th><th>Available in the lab?</th><th>Returned on</th><th>Remarks</th></tr></thead>
@@ -1587,7 +1588,7 @@ function attachActionHandlers() {
 function formatDateToDDMMYYYY(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr); if (isNaN(d)) return dateStr;
-  return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
+  return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}-${d.getFullYear()}`;
 }
 
 const borrowRequestMap = {};
@@ -1703,6 +1704,7 @@ function loadReports() {
             <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Student ID</span><br>${escHtml(req.student_id || '—')}</div>
             <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Instructor</span><br>${escHtml(req.instructor_name || '—')}</div>
             <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Subject Code</span><br>${escHtml(req.subject_code || '—')}</div>
+            <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Department</span><br>${escHtml(req.department || '—')}</div>
             <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Room</span><br>${escHtml(req.room || '—')}</div>
             <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Usage Date</span><br>${formatDateToDDMMYYYY(req.usage_date)}</div>
             <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Request Date</span><br>${formatDateToDDMMYYYY(req.date)}</div>

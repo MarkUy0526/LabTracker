@@ -919,6 +919,7 @@ session_start();
                 <div class="review-field"><span class="r-label">Instructor</span><span class="r-value" id="rv-instructor"></span></div>
                 <div class="review-field"><span class="r-label">Student ID</span><span class="r-value" id="rv-student-id"></span></div>
                 <div class="review-field"><span class="r-label">Subject Code</span><span class="r-value" id="rv-subject"></span></div>
+                <div class="review-field"><span class="r-label">Department</span><span class="r-value" id="rv-department"></span></div>
                 <div class="review-field"><span class="r-label">Date of Usage</span><span class="r-value" id="rv-usage-date"></span></div>
                 <div class="review-field"><span class="r-label">Room</span><span class="r-value" id="rv-room"></span></div>
             </div>
