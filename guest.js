@@ -1,5 +1,49 @@
 let allEquipmentData  = [];
 let selectedEquipment = [];
+let hiromiSignatureUrl = '';
+let hiromiSignatureVersion = Date.now();
+
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function getHiromiSignatureSrc() {
+    if (!hiromiSignatureUrl) return '';
+    const joiner = hiromiSignatureUrl.includes('?') ? '&' : '?';
+    return `${hiromiSignatureUrl}${joiner}v=${hiromiSignatureVersion}`;
+}
+
+function buildHiromiSignatureImage() {
+    const src = getHiromiSignatureSrc();
+    if (src) {
+        return `<img src="${escapeHtml(src)}" alt="Mr. Hiromi Rivas e-signature" style="display:block;width:180px;height:60px;object-fit:contain;margin:8px 0;">`;
+    }
+    return `<div style="width:180px;height:60px;border:1.5px dashed #bbb;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#777;font-size:12px;margin:8px 0;background:#fafafa;">e-signature here</div>`;
+}
+
+function refreshHiromiSignatureSlots() {
+    document.querySelectorAll('.hiromi-esig-slot').forEach(slot => {
+        slot.innerHTML = buildHiromiSignatureImage();
+    });
+}
+
+function loadHiromiSignature() {
+    return fetch('get_esignature.php')
+        .then(r => r.json())
+        .then(res => {
+            if (res.success && res.url) {
+                hiromiSignatureUrl = res.url;
+                hiromiSignatureVersion = Date.now();
+            }
+            refreshHiromiSignatureSlots();
+            return res;
+        })
+        .catch(() => refreshHiromiSignatureSlots());
+}
 
 // ════════════════════════════════════════════════════════════════
 // REAL-TIME REQUIRED FIELD INDICATOR (asterisk visibility)
@@ -211,7 +255,7 @@ function openReviewModal() {
 
     const uParts = usageDate.split('-');
     document.getElementById('rv-usage-date').textContent =
-        uParts.length === 3 ? `${uParts[2]}-${uParts[1]}-${uParts[0]}` : usageDate;
+        uParts.length === 3 ? `${uParts[1]}/${uParts[2]}/${uParts[0]}` : usageDate;
 
     // Equipment rows
     const tbody = document.getElementById('rv-equipment-list');
@@ -251,6 +295,7 @@ function closeReviewModal() {
 // INIT
 // ════════════════════════════════════════════════
 $(document).ready(function () {
+    loadHiromiSignature();
     getGuestNumber();
     setCurrentDate();
     fetchEquipment();
@@ -326,7 +371,7 @@ function setCurrentDate() {
     const d  = String(today.getDate()).padStart(2, '0');
     const m  = String(today.getMonth() + 1).padStart(2, '0');
     const y  = today.getFullYear();
-    $('#borrowDate').text(`${d}-${m}-${y}`);
+    $('#borrowDate').text(`${m}/${d}/${y}`);
     $('#borrowDateForDB').val(`${y}-${m}-${d}`);
 }
 

@@ -9,9 +9,12 @@ $equipmentID       = $conn->real_escape_string($_POST['equipmentID']       ?? ''
 $equipmentName     = $conn->real_escape_string($_POST['equipmentName']     ?? '');
 $serialNumber      = $conn->real_escape_string($_POST['serialNumber']      ?? '');
 $internalSN        = $conn->real_escape_string($_POST['internalSN']        ?? '');
-$totalQty          = (int) ($_POST['totalQty']      ?? 0);
-$workingQty        = (int) ($_POST['workingQty']    ?? 0);
-$notWorkingQty     = (int) ($_POST['notWorkingQty'] ?? 0);
+$totalQtyRaw       = trim($_POST['totalQty']      ?? '');
+$workingQtyRaw     = trim($_POST['workingQty']    ?? '');
+$notWorkingQtyRaw  = trim($_POST['notWorkingQty'] ?? '');
+$totalQty          = (int) $totalQtyRaw;
+$workingQty        = (int) $workingQtyRaw;
+$notWorkingQty     = (int) $notWorkingQtyRaw;
 $description       = $conn->real_escape_string($_POST['description']       ?? '');
 $accountablePerson = $conn->real_escape_string($_POST['accountablePerson'] ?? '');
 
@@ -21,6 +24,21 @@ if (empty($equipmentID) || empty($equipmentName) || empty($accountablePerson)) {
 }
 
 // ── Fetch current values BEFORE updating (for old vs new comparison) ──
+if (!ctype_digit($totalQtyRaw) || !ctype_digit($workingQtyRaw) || !ctype_digit($notWorkingQtyRaw)) {
+    echo json_encode(["success" => false, "message" => "Total, Working, and Not Working must be whole numbers."]);
+    exit;
+}
+
+if ($workingQty + $notWorkingQty !== $totalQty) {
+    echo json_encode(["success" => false, "message" => "Working plus Not Working must equal Total Qty."]);
+    exit;
+}
+
+if ($workingQty === 0 && $notWorkingQty === 0) {
+    echo json_encode(["success" => false, "message" => "Select at least one condition count."]);
+    exit;
+}
+
 $oldStmt = $conn->prepare(
     "SELECT equipment_name, serial_number, internal_sn, account_person,
             total_qty, working_qty, not_working_qty, description

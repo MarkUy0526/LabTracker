@@ -5,6 +5,8 @@ let selectedRow      = null;
 let selectedItemData = null;
 let canEditQty       = true;
 let currentEquipmentIDs = new Set();
+let hiromiSignatureUrl = '';
+let hiromiSignatureVersion = Date.now();
 
 // Inline edit state
 let editingRow      = null;
@@ -319,6 +321,82 @@ function escHtml(str) {
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function getHiromiSignatureSrc() {
+  if (!hiromiSignatureUrl) return '';
+  const joiner = hiromiSignatureUrl.includes('?') ? '&' : '?';
+  return `${hiromiSignatureUrl}${joiner}v=${hiromiSignatureVersion}`;
+}
+
+function buildHiromiSignatureImage() {
+  const src = getHiromiSignatureSrc();
+  if (src) {
+    return `<img src="${escHtml(src)}" alt="Mr. Hiromi Rivas e-signature" style="display:block;width:180px;height:60px;object-fit:contain;margin:8px 0;">`;
+  }
+  return `<div style="width:180px;height:60px;border:1.5px dashed #bbb;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#777;font-size:12px;margin:8px 0;background:#fafafa;">e-signature here</div>`;
+}
+
+function buildHiromiApprovalBlock(editable = false) {
+  return `
+    <strong>Approved by:</strong><br/>
+    <div class="hiromi-esig-slot">${buildHiromiSignatureImage()}</div>
+    ${editable ? `
+      <label style="display:inline-block;margin:2px 0 8px 0;padding:5px 10px;border:1px solid #bbb;border-radius:4px;background:#fff;cursor:pointer;font-size:12px;">
+        Upload/Edit e-signature
+        <input type="file" class="hiromi-esig-input" accept="image/png,image/jpeg,image/webp" style="display:none;">
+      </label>
+      <span class="hiromi-esig-status" style="display:block;color:#777;font-size:12px;min-height:16px;"></span>
+    ` : ''}
+    <em style="display:block;margin-top:4px;">Mr. Hiromi Rivas</em>
+    <em style="display:block;">Applied Physics Professor</em>`;
+}
+
+function refreshHiromiSignatureSlots() {
+  document.querySelectorAll('.hiromi-esig-slot').forEach(slot => {
+    slot.innerHTML = buildHiromiSignatureImage();
+  });
+}
+
+function loadHiromiSignature() {
+  return fetch('get_esignature.php')
+    .then(r => r.json())
+    .then(res => {
+      if (res.success && res.url) {
+        hiromiSignatureUrl = res.url;
+        hiromiSignatureVersion = Date.now();
+        refreshHiromiSignatureSlots();
+      }
+      return res;
+    })
+    .catch(err => console.warn('Unable to load e-signature:', err));
+}
+
+document.addEventListener('change', function(e) {
+  const input = e.target.closest('.hiromi-esig-input');
+  if (!input || !input.files || !input.files[0]) return;
+
+  const status = input.closest('td')?.querySelector('.hiromi-esig-status');
+  const formData = new FormData();
+  formData.append('signature', input.files[0]);
+  if (status) status.textContent = 'Uploading...';
+
+  fetch('upload_esignature.php', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message || 'Upload failed');
+      hiromiSignatureUrl = res.url;
+      hiromiSignatureVersion = Date.now();
+      refreshHiromiSignatureSlots();
+      if (status) status.textContent = 'E-signature updated.';
+      input.value = '';
+    })
+    .catch(err => {
+      if (status) status.textContent = err.message || 'Upload failed.';
+      input.value = '';
+    });
+});
+
+document.addEventListener('DOMContentLoaded', loadHiromiSignature);
+
 document.addEventListener('click', function(e) {
   const pop = document.getElementById('historyPopover');
   if (!pop) return;
@@ -347,6 +425,85 @@ function makeInlineInput(fieldName, type, value, disabled) {
   if (isTextarea) el.rows = 2;
   if (type === 'number') el.min = 0;
   return el;
+}
+
+function toNonNegativeInt(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const num = Number(value);
+  if (!Number.isInteger(num) || num < 0) return null;
+  return num;
+}
+
+function validateInventoryValues(values, requireId = false) {
+  const equipmentID = (values.equipmentID || '').trim();
+  const equipmentName = (values.equipmentName || '').trim();
+  const accountablePerson = (values.accountablePerson || '').trim();
+  const totalQty = toNonNegativeInt(values.totalQty);
+  const workingQty = toNonNegativeInt(values.workingQty);
+  const notWorkingQty = toNonNegativeInt(values.notWorkingQty);
+
+  if (requireId && !equipmentID) return { valid: false, message: 'Equipment ID is required.' };
+  if (!equipmentName) return { valid: false, message: 'Equipment Name is required.' };
+  if (!accountablePerson) return { valid: false, message: 'Accountable Person is required.' };
+  if (totalQty === null || workingQty === null || notWorkingQty === null) {
+    return { valid: false, message: 'Total, Working, and Not Working must be whole numbers.' };
+  }
+  if ((workingQty + notWorkingQty) !== totalQty) {
+    return { valid: false, message: 'Working plus Not Working must equal Total Qty.' };
+  }
+  if (workingQty === 0 && notWorkingQty === 0) {
+    return { valid: false, message: 'Select at least one condition count.' };
+  }
+  return { valid: true, totalQty, workingQty, notWorkingQty };
+}
+
+function setButtonDisabledState(btn, disabled) {
+  if (!btn) return;
+  btn.disabled = disabled;
+  btn.style.opacity = disabled ? '.55' : '1';
+  btn.style.cursor = disabled ? 'not-allowed' : 'pointer';
+}
+
+function showInventoryFeedback(message) {
+  let toast = document.getElementById('inventoryFeedbackToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'inventoryFeedbackToast';
+    toast.style.cssText = `
+      position:fixed;right:28px;bottom:88px;z-index:1400;
+      background:var(--accent);color:#fff;border-radius:var(--radius);
+      padding:10px 14px;box-shadow:0 8px 28px rgba(0,0,0,.18);
+      font-family:var(--font);font-size:13px;font-weight:600;
+      max-width:340px;opacity:0;transform:translateY(8px);
+      transition:opacity .18s ease, transform .18s ease;
+    `;
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  requestAnimationFrame(() => {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+  });
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(8px)';
+  }, 3200);
+}
+
+function buildInventoryUpdateMessage(equipmentName, previousNotWorking, nextNotWorking) {
+  const deltaNotWorking = Math.max(0, nextNotWorking - previousNotWorking);
+  if (deltaNotWorking > 0) {
+    return `Inventory updated: ${deltaNotWorking} item${deltaNotWorking === 1 ? '' : 's'} marked as Not Working`;
+  }
+  return `Inventory updated: ${equipmentName} saved`;
+}
+
+function confirmRiskyInventoryUpdate(previousNotWorking, nextNotWorking) {
+  if (nextNotWorking > previousNotWorking) {
+    return confirm('This will update inventory counts and mark items as Not Working. Continue?');
+  }
+  return true;
 }
 
 function createStickyActionBar(item) {
@@ -402,6 +559,52 @@ function createStickyActionBar(item) {
   saveBtn.addEventListener('click',   saveInlineEdit);
   cancelBtn.addEventListener('click', cancelInlineEdit);
   return bar;
+}
+
+function getInlineInventoryValues() {
+  function val(fieldName) {
+    const el = editingRow?.querySelector(`[data-field="${fieldName}"]`);
+    return el ? el.value.trim() : '';
+  }
+
+  return {
+    equipmentID: currentEditItem?.equipment_id || '',
+    equipmentName: val('equipmentName'),
+    accountablePerson: val('accountablePerson'),
+    totalQty: val('totalQty') || String(currentEditItem?.total_qty ?? ''),
+    workingQty: val('workingQty') || String(currentEditItem?.working_qty ?? ''),
+    notWorkingQty: val('notWorkingQty') || String(currentEditItem?.not_working_qty ?? '')
+  };
+}
+
+function updateInlineEditSaveState() {
+  if (!editingRow) return;
+  const saveBtn = document.getElementById('inlineEditSaveBtn');
+  const validation = validateInventoryValues(getInlineInventoryValues());
+  setButtonDisabledState(saveBtn, !validation.valid);
+  if (saveBtn) saveBtn.title = validation.valid ? '' : validation.message;
+}
+
+function getAddInventoryValues() {
+  const get = id => document.getElementById(id)?.value.trim() || '';
+  return {
+    equipmentID: get('equipmentID'),
+    equipmentName: get('equipmentName'),
+    accountablePerson: get('accountablePerson'),
+    totalQty: get('totalQty'),
+    workingQty: get('workingQty'),
+    notWorkingQty: get('notWorkingQty')
+  };
+}
+
+function updateAddEquipmentSaveState() {
+  const submitBtn = document.getElementById('submitEquipmentBtn');
+  const validation = validateInventoryValues(getAddInventoryValues(), true);
+  const duplicate = currentEquipmentIDs.has(getAddInventoryValues().equipmentID);
+  setButtonDisabledState(submitBtn, !validation.valid || duplicate);
+  if (submitBtn) {
+    submitBtn.title = duplicate ? 'Equipment ID already exists.' : (validation.valid ? '' : validation.message);
+  }
 }
 
 function removeStickyBar() {
@@ -505,6 +708,11 @@ function enterInlineEdit(row, item) {
   row.style.background = 'var(--accent-soft)';
   removeStickyBar();
   document.body.appendChild(createStickyActionBar(item));
+  row.querySelectorAll('input[data-field], textarea[data-field]').forEach(el => {
+    el.addEventListener('input', updateInlineEditSaveState);
+    el.addEventListener('change', updateInlineEditSaveState);
+  });
+  updateInlineEditSaveState();
 }
 
 function cancelInlineEdit() {
@@ -540,10 +748,21 @@ function saveInlineEdit() {
   const notWorkingQty     = val('notWorkingQty') || String(currentEditItem.not_working_qty);
   const description       = val('description');
 
-  if (!equipmentName || !accountablePerson) {
-    alert('Equipment Name and Accountable Person are required.');
+  const validation = validateInventoryValues({
+    equipmentName,
+    accountablePerson,
+    totalQty,
+    workingQty,
+    notWorkingQty
+  });
+  if (!validation.valid) {
+    alert(validation.message);
     return;
   }
+
+  const previousNotWorking = parseInt(currentEditItem.not_working_qty, 10) || 0;
+  const nextNotWorking = validation.notWorkingQty;
+  if (!confirmRiskyInventoryUpdate(previousNotWorking, nextNotWorking)) return;
 
   const saveBtn = document.getElementById('inlineEditSaveBtn');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
@@ -592,6 +811,7 @@ function saveInlineEdit() {
         selectedRow = null; selectedItemData = null;
         loadInventory();
         loadInventoryPreview();
+        showInventoryFeedback(buildInventoryUpdateMessage(equipmentName, previousNotWorking, nextNotWorking));
       } else {
         alert('Error saving: ' + (res.message || 'Unknown error'));
         if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save changes'; }
@@ -619,6 +839,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ['equipmentID','totalQty','workingQty','notWorkingQty']
       .forEach(id => { document.getElementById(id).disabled = false; });
     openAddEquipmentModal();
+    updateAddEquipmentSaveState();
   };
 
   window.addEventListener('click', function(e) {
@@ -639,6 +860,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // FIX 2: SUBMIT ADD MODAL — after success, call saveEquipmentLog + loadInventory
+  ['equipmentID','equipmentName','accountablePerson','totalQty','workingQty','notWorkingQty']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', updateAddEquipmentSaveState);
+      el.addEventListener('change', updateAddEquipmentSaveState);
+    });
+  updateAddEquipmentSaveState();
+
   document.getElementById('submitEquipmentBtn').onclick = function(e) {
     e.preventDefault();
     const equipmentID       = document.getElementById('equipmentID').value.trim();
@@ -651,12 +881,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const description       = document.getElementById('description').value.trim();
     const accountablePerson = document.getElementById('accountablePerson').value.trim();
 
-    if (!equipmentID || !equipmentName || !totalQty || !workingQty || !notWorkingQty || !accountablePerson) {
-      alert('Please fill in all required fields.'); return;
-    }
+    const validation = validateInventoryValues({
+      equipmentID,
+      equipmentName,
+      accountablePerson,
+      totalQty,
+      workingQty,
+      notWorkingQty
+    }, true);
+    if (!validation.valid) { alert(validation.message); return; }
     if (currentEquipmentIDs.has(equipmentID)) {
       alert('Equipment ID already exists. Please use a unique ID.'); return;
     }
+    if (!confirmRiskyInventoryUpdate(0, validation.notWorkingQty)) return;
 
     $.ajax({
       url: 'add_equipment.php', method: 'POST',
@@ -669,7 +906,7 @@ document.addEventListener('DOMContentLoaded', () => {
         catch(e) { data = { success: false, message: 'Invalid response' }; }
 
         if (data.success) {
-          alert('Equipment added successfully!');
+          showInventoryFeedback(buildInventoryUpdateMessage(equipmentName, 0, validation.notWorkingQty));
           closeAddEquipmentModal();
 
           // ── Record to history log with PH timestamp ──
@@ -690,6 +927,7 @@ document.addEventListener('DOMContentLoaded', () => {
           // FIX 3: reload inventory immediately so new equipment shows without page refresh
           loadInventory();
           loadInventoryPreview();
+          updateAddEquipmentSaveState();
         } else {
           alert('Error: ' + (data.message || 'Unknown error'));
         }
@@ -1530,8 +1768,7 @@ function loadBorrowRequests() {
                 <em>"I will be accountable to any damage incurred in the equipment and will return the equipment promptly and in the same working condition it was borrowed."</em>
               </td></tr>
               <tr>
-                <td style="padding-top:30px;"><p>Approved by:<br><br><div style="width:180px;height:60px;border:1.5px dashed #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px;margin-bottom:8px;background:#fafafa;">e-signature here</div>__________________________<br><em style="display:block;margin-top:4px;">Mr. Hiromi Rivas</em><em style="display:block;">Applied Physics Professor</em></p></td>
-                <td style="text-align:right;padding-top:30px;"><p>_________________________________<br><em>Signature over Printed Name of Borrower</em></p></td>
+                <td colspan="2" style="padding-top:30px;">${buildHiromiApprovalBlock(true)}</td>
               </tr>
             </table>
           </div>
@@ -1587,8 +1824,43 @@ function attachActionHandlers() {
 
 function formatDateToDDMMYYYY(dateStr) {
   if (!dateStr) return '';
+  const parts = String(dateStr).split(/[T\s]/)[0].split('-');
+  if (parts.length === 3) return `${parts[1]}/${parts[2]}/${parts[0]}`;
   const d = new Date(dateStr); if (isNaN(d)) return dateStr;
-  return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}-${d.getFullYear()}`;
+  return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;
+}
+
+function buildReturnRemarksControl(remarksValue, quantity) {
+  const qty = Number(quantity) || 0;
+  const options = ['Good Condition', 'Not Working'];
+  if (qty > 1) options.push('Complete', 'Incomplete');
+
+  const saved = String(remarksValue || '').trim();
+  const selectedStandard = options.find(option => option.toLowerCase() === saved.toLowerCase()) || '';
+  const useOther = saved && !selectedStandard;
+  const optionHtml = [
+    '<option value="">Select remarks</option>',
+    ...options.map(option => `<option value="${escHtml(option)}"${selectedStandard === option ? ' selected' : ''}>${escHtml(option)}</option>`),
+    `<option value="__other__"${useOther ? ' selected' : ''}>Others</option>`
+  ].join('');
+
+  return `
+    <select class="return-remarks-select"
+      style="font-family:var(--font);font-size:12px;padding:4px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-1);width:100%;box-sizing:border-box;">
+      ${optionHtml}
+    </select>
+    <input type="text" class="return-remarks-other-input" value="${useOther ? escHtml(saved) : ''}" placeholder="Enter remarks"
+      style="display:${useOther ? 'block' : 'none'};margin-top:6px;font-family:var(--font);font-size:12px;padding:4px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-1);width:100%;box-sizing:border-box;">
+  `;
+}
+
+function getReturnRemarksValue(row) {
+  const select = row.querySelector('.return-remarks-select');
+  if (!select) return row.querySelector('.return-remarks-input')?.value || '';
+  if (select.value === '__other__') {
+    return row.querySelector('.return-remarks-other-input')?.value.trim() || '';
+  }
+  return select.value || '';
 }
 
 const borrowRequestMap = {};
@@ -1664,8 +1936,7 @@ function loadReports() {
                   style="font-family:var(--font);font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-1);width:130px;">
               </td>
               <td style="padding:6px 10px;border-bottom:1px solid var(--border);">
-                <input type="text" class="return-remarks-input" value="${escHtml(remarksVal)}" placeholder="e.g. Good condition"
-                  style="font-family:var(--font);font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-1);width:100%;box-sizing:border-box;">
+                ${buildReturnRemarksControl(remarksVal, eq.quantity)}
               </td>
             </tr>`;
           } else {
@@ -1726,6 +1997,15 @@ function loadReports() {
       });
 
       // ── Wire Save Return Info buttons ──
+      container.querySelectorAll('.return-remarks-select').forEach(select => {
+        select.addEventListener('change', () => {
+          const customInput = select.closest('td')?.querySelector('.return-remarks-other-input');
+          if (!customInput) return;
+          customInput.style.display = select.value === '__other__' ? 'block' : 'none';
+          if (select.value === '__other__') customInput.focus();
+        });
+      });
+
       container.querySelectorAll('.saveReturnInfoBtn').forEach(btn => {
         btn.addEventListener('click', () => {
           const reqId = btn.dataset.reqId;
@@ -1737,7 +2017,7 @@ function loadReports() {
             returnedItems.push({
               equipment_name: row.dataset.eqName,
               returned_on:    row.querySelector('.return-date-input')?.value    || '',
-              remarks:        row.querySelector('.return-remarks-input')?.value || ''
+              remarks:        getReturnRemarksValue(row)
             });
           });
 
@@ -1780,26 +2060,98 @@ function loadReports() {
       container.querySelectorAll('.downloadPdfBtn').forEach(btn => {
         btn.addEventListener('click', () => {
           const reqId = btn.dataset.reqId;
-          const card  = container.querySelector(`.report-entry[data-req-id="${reqId}"]`);
-          if (!card) return;
+          const req = json.data.find(entry => entry.borrowRequest.id == reqId)?.borrowRequest;
+          const eqList = json.data.find(entry => entry.borrowRequest.id == reqId)?.equipmentList || [];
+          const card = container.querySelector(`.report-entry[data-req-id="${reqId}"]`);
+          if (!req) return;
 
-          // Clone card, strip inputs → show values as plain text for PDF
-          const clone = card.cloneNode(true);
-          clone.querySelectorAll('.saveReturnInfoBtn, .downloadPdfBtn').forEach(b => b.remove());
-          clone.querySelectorAll('input.return-date-input').forEach(input => {
-            const span = document.createElement('span');
-            span.textContent = input.value ? formatDateToDDMMYYYY(input.value) : '—';
-            input.replaceWith(span);
+          const currentReturnInfo = new Map();
+          card?.querySelectorAll('tr[data-eq-name]').forEach(row => {
+            currentReturnInfo.set(row.dataset.eqName, {
+              returned_on: row.querySelector('.return-date-input')?.value || '',
+              remarks: getReturnRemarksValue(row)
+            });
           });
-          clone.querySelectorAll('input.return-remarks-input').forEach(input => {
-            const span = document.createElement('span');
-            span.textContent = input.value || '—';
-            input.replaceWith(span);
-          });
+
+          // Build full equipment-borrowing form for PDF
+          const eqRows = eqList.map(eq => {
+            const liveInfo = currentReturnInfo.get(eq.equipment_name) || {};
+            const returnedOn = liveInfo.returned_on ?? eq.returned_on;
+            const remarks = liveInfo.remarks ?? eq.remarks;
+            return `
+              <tr>
+                <td style="border: 1px solid #000; padding: 8px;">${escHtml(eq.equipment_name)}</td>
+                <td style="border: 1px solid #000; padding: 8px; text-align: center;">${eq.quantity}</td>
+                <td style="border: 1px solid #000; padding: 8px; text-align: center;">YES</td>
+                <td style="border: 1px solid #000; padding: 8px;">${returnedOn ? formatDateToDDMMYYYY(returnedOn) : '—'}</td>
+                <td style="border: 1px solid #000; padding: 8px;">${escHtml(remarks || '—')}</td>
+              </tr>
+            `;
+          }).join('');
+
+          const formHtml = `
+            <div style="font-family: Arial, sans-serif; font-size: 12px; padding: 20px; max-width: 800px; margin: 0 auto;">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <h3 style="margin: 4px 0;">EULOGIO "AMANG" RODRIGUEZ INSTITUTE OF SCIENCE AND TECHNOLOGY</h3>
+                <h3 style="margin: 4px 0;">COLLEGE OF ARTS AND SCIENCES</h3>
+                <h3 style="margin: 4px 0;">APPLIED PHYSICS DEPARTMENT</h3>
+                <h2 style="margin: 10px 0;">Equipment-borrowing Form</h2>
+              </div>
+
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <tr>
+                  <td style="padding: 5px;"><strong>Guest Login Number:</strong> ${escHtml(req.guest_number)}</td>
+                  <td style="padding: 5px;"><strong>Date:</strong> ${formatDateToDDMMYYYY(req.date)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px;"><strong>Borrower's Name:</strong> ${escHtml(req.borrower_name)}</td>
+                  <td style="padding: 5px;"><strong>Instructor's Name:</strong> ${escHtml(req.instructor_name || '—')}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px;"><strong>Student ID:</strong> ${escHtml(req.student_id || '—')}</td>
+                  <td style="padding: 5px;"><strong>Subject Code:</strong> ${escHtml(req.subject_code || '—')}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px;"><strong>Department:</strong> ${escHtml(req.department || '—')}</td>
+                  <td style="padding: 5px;"><strong>Date(s) of Usage:</strong> ${formatDateToDDMMYYYY(req.usage_date)}</td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="padding: 5px;"><strong>Room:</strong> ${escHtml(req.room || '—')}</td>
+                </tr>
+              </table>
+
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #000;">
+                <thead>
+                  <tr style="background: #f0f0f0;">
+                    <th style="border: 1px solid #000; padding: 8px; text-align: left;">Equipment / Material</th>
+                    <th style="border: 1px solid #000; padding: 8px; text-align: center;">Quantity</th>
+                    <th style="border: 1px solid #000; padding: 8px; text-align: center;">Available in the lab?</th>
+                    <th style="border: 1px solid #000; padding: 8px; text-align: left;">Returned on</th>
+                    <th style="border: 1px solid #000; padding: 8px; text-align: left;">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${eqRows}
+                </tbody>
+              </table>
+
+              <div style="margin-bottom: 20px;">
+                <strong>Borrower's Declaration of Commitment:</strong><br/>
+                <em>"I will be accountable to any damage incurred in the equipment and will return the equipment promptly and in the same working condition it was borrowed."</em>
+              </div>
+
+              <table style="width: 100%; margin-top: 40px;">
+                <tr>
+                  <td colspan="2" style="padding: 20px; text-align: left; vertical-align: top;">
+                    ${buildHiromiApprovalBlock(false)}
+                  </td>
+                </tr>
+              </table>
+            </div>
+          `;
 
           const wrapper = document.createElement('div');
-          wrapper.style.cssText = 'padding:24px;font-family:sans-serif;font-size:13px;color:#111;';
-          wrapper.appendChild(clone);
+          wrapper.innerHTML = formHtml;
 
           html2pdf().set({
             margin:      [10, 10, 10, 10],

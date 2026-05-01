@@ -27,10 +27,25 @@ if ($equipmentID === '' || $equipmentName === '' || $totalQty === '' ||
     exit();
 }
 
+if (!ctype_digit($totalQty) || !ctype_digit($workingQty) || !ctype_digit($notWorkingQty)) {
+    echo json_encode(['success' => false, 'message' => 'Total, Working, and Not Working must be whole numbers.']);
+    exit();
+}
+
 $totalQty      = (int) $totalQty;
 $workingQty    = (int) $workingQty;
 $notWorkingQty = (int) $notWorkingQty;
 $available     = $workingQty;
+
+if ($workingQty + $notWorkingQty !== $totalQty) {
+    echo json_encode(['success' => false, 'message' => 'Working plus Not Working must equal Total Qty.']);
+    exit();
+}
+
+if ($workingQty === 0 && $notWorkingQty === 0) {
+    echo json_encode(['success' => false, 'message' => 'Select at least one condition count.']);
+    exit();
+}
 
 // ── INSERT equipment ──
 $stmt = $conn->prepare(
