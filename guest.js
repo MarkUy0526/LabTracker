@@ -587,16 +587,27 @@ function submitBorrowRequest() {
 
     if (confirmNum !== guestNum) { alert('Guest number does not match.'); return; }
 
+    const roomCustom = document.getElementById('roomCustomInput');
+    const roomSelect = document.getElementById('roomSelect');
+    const instructorCustom = document.getElementById('instructorCustomInput');
+    const instructorSelect = document.getElementById('instructorName');
+    const room = (roomCustom && roomCustom.classList.contains('show'))
+        ? roomCustom.value.trim()
+        : roomSelect.value;
+    const instructor = (instructorCustom && instructorCustom.classList.contains('show'))
+        ? instructorCustom.value.trim()
+        : instructorSelect.value;
+
     const data = {
         guestNumber:    guestNum,
         date:           $('#borrowDateForDB').val(),
         borrowerName:   $('#borrowerName').val(),
-        instructorName: $('#instructorName').val(),
+        instructorName: instructor,
         studentID:      $('#studentID').val(),
         subjectCode:    $('#subjectCode').val(),
         usageDate:      $('#usageDate').val(),
         department:     $('#departmentSelect').val(),
-        room:           $('#roomSelect').val(),
+        room:           room,
         equipmentList:  []
     };
 
@@ -632,8 +643,11 @@ function showFinalConfirmationModal(data) {
     const orig = document.getElementById('borrowerForm');
     if (!orig) return;
     const clone = orig.cloneNode(true);
+    try { clone.querySelector('#departmentSelect').value = data.department || ''; } catch(e) {}
     try { clone.querySelector('#instructorName').value = data.instructorName || ''; } catch(e) {}
     try { clone.querySelector('#roomSelect').value     = data.room || ''; } catch(e) {}
+    try { clone.querySelector('#instructorCustomInput').value = data.instructorName || ''; } catch(e) {}
+    try { clone.querySelector('#roomCustomInput').value       = data.room || ''; } catch(e) {}
     clone.querySelectorAll('input, select, textarea, button').forEach(el => {
         el.disabled = true; el.readOnly = true;
         if (el.type === 'submit' || el.type === 'button') el.style.display = 'none';

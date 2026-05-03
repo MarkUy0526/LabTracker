@@ -13,6 +13,12 @@ let editingRow      = null;
 let originalRowHTML = '';
 let currentEditItem = null;
 
+// Audit state
+let currentAuditID = null;
+let currentAuditData = { items: [], changes: {} };
+let auditSearchQuery = '';
+let auditStatusFilter = 'All';
+
 // ════════════════════════════════════════════════════════════════
 // PASSWORD — always required every click, no sessionStorage cache
 // ════════════════════════════════════════════════════════════════
@@ -94,9 +100,614 @@ function saveEquipmentLog(data, action) {
 function switchInvTab(tab) {
   document.getElementById('invPanelList').classList.toggle('active',    tab === 'list');
   document.getElementById('invPanelHistory').classList.toggle('active', tab === 'history');
+  document.getElementById('invPanelAudit').classList.toggle('active',   tab === 'audit');
   document.getElementById('invTabListBtn').classList.toggle('active',   tab === 'list');
   document.getElementById('invTabHistBtn').classList.toggle('active',   tab === 'history');
+  document.getElementById('invTabAuditBtn').classList.toggle('active',  tab === 'audit');
   if (tab === 'history') loadHistoryTab();
+  if (tab === 'audit') loadAuditSummary();
+}
+
+// ════════════════════════════════════════════════════════════════
+// INVENTORY AUDIT FEATURE
+// ════════════════════════════════════════════════════════════════
+
+function loadAuditSummary() {
+  fetch('get_last_audit_date.php')
+    .then(r => r.json())
+    .then(res => {
+      if (res.success) {
+        const lastDate = document.getElementById('lastAuditDate');
+        const nextDate = document.getElementById('nextScheduledDate');
+        if (lastDate) lastDate.textContent = res.last_audit_date ? formatAuditDate(res.last_audit_date) : 'Never';
+        if (nextDate) nextDate.textContent = res.next_scheduled_date ? formatAuditDate(res.next_scheduled_date) : '—';
+      }
+    })
+    .catch(err => console.error('Error loading audit summary:', err));
+
+  loadMostBorrowedEquipment();
+}
+
+function formatAuditDate(dateStr) {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function loadMostBorrowedEquipment() {
+  fetch('get_most_borrowed.php')
+    .then(r => r.json())
+    .then(res => {
+      if (res.success && res.data) {
+        const tbody = document.getElementById('mostBorrowedBody');
+        if (tbody) {
+          tbody.innerHTML = res.data.map((item, idx) => `
+            <tr>
+              <td style="padding:8px 10px;text-align:center;font-weight:600;">${item.rank}</td>
+              <td style="padding:8px 10px;text-align:left;">${escHtml(item.equipment_name)}</td>
+              <td style="padding:8px 10px;text-align:center;">${item.borrow_frequency}</td>
+              <td style="padding:8px 10px;text-align:center;">${item.total_qty_borrowed}</td>
+            </tr>
+          `).join('');
+        }
+      }
+    })
+    .catch(err => console.error('Error loading most borrowed equipment:', err));
+}
+
+function openStartAuditModal() {
+  const today = new Date().toISOString().split('T')[0];
+  const auditDateInput = document.createElement('input');
+  auditDateInput.type = 'date';
+  auditDateInput.value = today;
+  auditDateInput.id = 'startAuditDate';
+  auditDateInput.style.cssText = 'font-family:var(--font);font-size:12px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);width:100%;box-sizing:border-box;margin-bottom:12px;';
+
+  const adminInput = document.createElement('input');
+  adminInput.type = 'text';
+  adminInput.value = 'Admin';
+  adminInput.id = 'startAuditAdmin';
+  adminInput.style.cssText = 'font-family:var(--font);font-size:12px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);width:100%;box-sizing:border-box;margin-bottom:16px;';
+
+  const modal = document.createElement('div');
+  modal.id = 'startAuditModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:1100;background:rgba(26,26,24,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow-md);width:min(400px,100%);padding:24px;">
+      <h2 style="font-size:16px;font-weight:600;color:var(--text-1);margin:0 0 16px 0;">Start New Inventory Audit</h2>
+      <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:6px;">Audit Date</label>
+      <div id="auditDateContainer"></div>
+      <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:6px;margin-top:12px;">Admin Name</label>
+      <div id="adminNameContainer"></div>
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button onclick="closeStartAuditModal()" style="flex:1;background:var(--surface-2);border:1px solid var(--border);padding:10px;border-radius:var(--radius);cursor:pointer;">← Back</button>
+        <button onclick="beginAudit()" style="flex:1;background:var(--accent);color:#fff;border:1px solid var(--accent);padding:10px;border-radius:var(--radius);cursor:pointer;font-weight:600;">Start Checking →</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  document.getElementById('auditDateContainer').appendChild(auditDateInput);
+  document.getElementById('adminNameContainer').appendChild(adminInput);
+}
+
+function closeStartAuditModal() {
+  const modal = document.getElementById('startAuditModal');
+  if (modal) modal.remove();
+}
+
+function beginAudit() {
+  const auditDateInput = document.getElementById('startAuditDate');
+  const adminInput = document.getElementById('startAuditAdmin');
+
+  if (!auditDateInput || !adminInput) return;
+
+  const auditDate = auditDateInput.value;
+  const adminName = adminInput.value.trim() || 'Admin';
+
+  const formData = new FormData();
+  formData.append('audit_date', auditDate);
+  formData.append('admin_name', adminName);
+
+  fetch('create_audit.php', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message);
+      currentAuditID = res.audit_id;
+      document.getElementById('auditDateDisplay').textContent = formatAuditDate(res.audit_date) + ' by ' + escHtml(res.admin_name);
+      closeStartAuditModal();
+      loadAuditChecklistItems();
+    })
+    .catch(err => {
+      alert('Error creating audit: ' + err.message);
+    });
+}
+
+function loadAuditChecklistItems() {
+  fetch('get_equipment_for_audit.php')
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success || !res.data) throw new Error(res.message);
+      currentAuditData.items = res.data;
+      renderAuditChecklistTable();
+      document.getElementById('auditChecklistSection').style.display = 'block';
+      filterAuditItems();
+    })
+    .catch(err => {
+      alert('Error loading equipment: ' + err.message);
+    });
+}
+
+function renderAuditChecklistTable() {
+  const tbody = document.getElementById('auditItemsBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = currentAuditData.items.map((item, idx) => {
+    const actualQty = item.actual_qty || 0;
+    const status = determineAuditStatus(item);
+    return `
+      <tr data-equipment-id="${escHtml(item.equipment_id)}" data-index="${idx}" style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 12px;text-align:left;">${escHtml(item.equipment_name)}</td>
+        <td style="padding:10px 12px;text-align:center;color:var(--text-2);">${item.expected_qty}</td>
+        <td style="padding:10px 12px;text-align:center;">
+          <input type="number" min="0" value="${actualQty}" class="audit-qty-input"
+                 style="width:70px;text-align:center;padding:5px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text-1);font-family:var(--font);font-size:12px;outline:none;"
+                 data-index="${idx}" />
+        </td>
+        <td style="padding:10px 12px;text-align:left;">
+          <select class="audit-status-select" data-index="${idx}"
+                  style="font-family:var(--font);font-size:12px;padding:5px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text-1);outline:none;">
+            <option value="Complete" ${status === 'Complete' ? 'selected' : ''}>Complete</option>
+            <option value="Missing" ${status === 'Missing' ? 'selected' : ''}>Missing</option>
+            <option value="Damaged" ${status === 'Damaged' ? 'selected' : ''}>Damaged</option>
+          </select>
+        </td>
+        <td style="padding:10px 12px;text-align:left;">
+          <textarea placeholder="Notes..." class="audit-damage-notes" data-index="${idx}" style="font-family:var(--font);font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text-1);width:100%;min-height:28px;resize:vertical;outline:none;">${escHtml(item.damage_notes || '')}</textarea>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Add event listeners after rendering
+  tbody.querySelectorAll('.audit-qty-input').forEach(input => {
+    input.addEventListener('change', function() {
+      const idx = parseInt(this.getAttribute('data-index'));
+      const row = this.closest('tr');
+      if (idx >= 0 && row) {
+        const item = currentAuditData.items[idx];
+        if (item) {
+          item.actual_qty = parseInt(this.value) || 0;
+
+          // Auto-update status if not manually set to Damaged
+          const statusSelect = row.querySelector('.audit-status-select');
+          if (statusSelect && statusSelect.value !== 'Damaged') {
+            if (item.actual_qty === item.expected_qty) {
+              item.status = 'Complete';
+              statusSelect.value = 'Complete';
+            } else if (item.actual_qty < item.expected_qty) {
+              item.status = 'Missing';
+              statusSelect.value = 'Missing';
+            }
+          }
+          filterAuditItems();
+        }
+      }
+    });
+  });
+
+  tbody.querySelectorAll('.audit-status-select').forEach(select => {
+    select.addEventListener('change', function() {
+      const idx = parseInt(this.getAttribute('data-index'));
+      if (idx >= 0) {
+        const item = currentAuditData.items[idx];
+        if (item) {
+          item.status = this.value;
+          filterAuditItems();
+        }
+      }
+    });
+  });
+
+  tbody.querySelectorAll('.audit-damage-notes').forEach(textarea => {
+    textarea.addEventListener('change', function() {
+      const idx = parseInt(this.getAttribute('data-index'));
+      if (idx >= 0) {
+        const item = currentAuditData.items[idx];
+        if (item) {
+          item.damage_notes = this.value;
+        }
+      }
+    });
+  });
+}
+
+function determineAuditStatus(item) {
+  if (item.status === 'Damaged') return 'Damaged';
+  if (item.actual_qty === item.expected_qty) return 'Complete';
+  if (item.actual_qty < item.expected_qty) return 'Missing';
+  return 'Complete';
+}
+
+function filterAuditItems() {
+  const searchQuery = (document.getElementById('auditSearchInput')?.value || '').toLowerCase();
+  const statusFilter = document.getElementById('auditStatusFilter')?.value || 'All';
+
+  const tbody = document.getElementById('auditItemsBody');
+  if (!tbody) return;
+
+  let allCount = 0, completeCount = 0, missingCount = 0, damagedCount = 0;
+
+  Array.from(tbody.querySelectorAll('tr')).forEach(row => {
+    const equipmentName = row.textContent.toLowerCase();
+    const statusSelect = row.querySelector('.audit-status-select');
+    const status = statusSelect?.value || 'Complete';
+
+    const matchesSearch = equipmentName.includes(searchQuery);
+    const matchesStatus = statusFilter === 'All' || status === statusFilter;
+    const isVisible = matchesSearch && matchesStatus;
+
+    row.style.display = isVisible ? '' : 'none';
+
+    if (isVisible) {
+      allCount++;
+      if (status === 'Complete') completeCount++;
+      else if (status === 'Missing') missingCount++;
+      else if (status === 'Damaged') damagedCount++;
+    }
+  });
+
+  const countAll = document.getElementById('auditCountAll');
+  const countComplete = document.getElementById('auditCountComplete');
+  const countMissing = document.getElementById('auditCountMissing');
+  const countDamaged = document.getElementById('auditCountDamaged');
+
+  if (countAll) countAll.textContent = allCount;
+  if (countComplete) countComplete.textContent = completeCount;
+  if (countMissing) countMissing.textContent = missingCount;
+  if (countDamaged) countDamaged.textContent = damagedCount;
+}
+
+function saveDraftAudit() {
+  if (!currentAuditID) {
+    alert('No active audit');
+    return;
+  }
+
+  const items = currentAuditData.items.map(item => ({
+    equipment_id: item.equipment_id,
+    equipment_name: item.equipment_name,
+    expected_qty: item.expected_qty,
+    actual_qty: item.actual_qty || 0,
+    status: item.status || 'Complete',
+    damage_notes: item.damage_notes || ''
+  }));
+
+  if (items.length === 0) {
+    alert('No items to save');
+    return;
+  }
+
+  const payload = { audit_id: currentAuditID, items: items };
+
+  fetch('save_audit_items.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message);
+      console.log('Saved ' + items.length + ' items');
+      showAuditFeedback('Draft audit saved (' + items.length + ' items)');
+    })
+    .catch(err => {
+      console.error('Save error:', err);
+      alert('Error saving draft: ' + err.message);
+    });
+}
+
+function submitAudit() {
+  if (!currentAuditID) {
+    alert('No active audit');
+    return;
+  }
+
+  // First save all items
+  const items = currentAuditData.items.map(item => ({
+    equipment_id: item.equipment_id,
+    equipment_name: item.equipment_name,
+    expected_qty: item.expected_qty,
+    actual_qty: item.actual_qty || 0,
+    status: item.status || 'Complete',
+    damage_notes: item.damage_notes || ''
+  }));
+
+  if (items.length === 0) {
+    alert('No items to submit');
+    return;
+  }
+
+  // Save items first
+  fetch('save_audit_items.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audit_id: currentAuditID, items: items })
+  })
+    .then(r => r.json())
+    .then(saveRes => {
+      if (!saveRes.success) throw new Error(saveRes.message);
+
+      // Then submit the audit
+      return fetch('submit_audit.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audit_id: currentAuditID })
+      }).then(r => r.json());
+    })
+    .then(res => {
+      if (!res.success) throw new Error(res.message);
+
+      document.getElementById('auditChecklistSection').style.display = 'none';
+      document.getElementById('auditSummarySection').style.display = 'block';
+
+      document.getElementById('summaryTotal').textContent = res.summary.total_items;
+      document.getElementById('summaryComplete').textContent = res.summary.complete_count;
+      document.getElementById('summaryMissing').textContent = res.summary.missing_count;
+      document.getElementById('summaryDamaged').textContent = res.summary.damaged_count;
+
+      showAuditFeedback('Audit submitted successfully!');
+    })
+    .catch(err => {
+      console.error('Submit error:', err);
+      alert('Error submitting audit: ' + err.message);
+    });
+}
+
+function viewCurrentAuditDetail() {
+  if (!currentAuditID) {
+    alert('Invalid audit ID');
+    return;
+  }
+
+  fetch('get_audit_details.php?audit_id=' + encodeURIComponent(currentAuditID))
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message);
+
+      const modal = document.createElement('div');
+      modal.id = 'auditDetailModal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:1200;background:rgba(26,26,24,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:20px;';
+
+      const itemsHtml = res.items.map(item => `
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.equipment_name)}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${item.expected_qty}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${item.actual_qty}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.status)}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.damage_notes || '')}</td>
+        </tr>
+      `).join('');
+
+      modal.innerHTML = `
+        <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);width:min(900px,100%);max-height:80vh;overflow-y:auto;padding:24px;box-shadow:var(--shadow-md);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h2 style="font-size:16px;font-weight:600;color:var(--text-1);margin:0;">Audit Details</h2>
+            <button class="close-detail-modal" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:20px;padding:0;width:30px;height:30px;">×</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px;">
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Date</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${formatAuditDate(res.audit.audit_date)}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Admin</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${escHtml(res.audit.admin_name)}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Complete</span><div style="font-size:14px;font-weight:600;color:var(--accent);">${res.audit.complete_count}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Missing</span><div style="font-size:14px;font-weight:600;color:var(--danger);">${res.audit.missing_count}</div></div>
+          </div>
+
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:var(--surface-2);">
+                <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Equipment</th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Expected</th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Actual</th>
+                <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Status</th>
+                <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Notes</th>
+              </tr>
+            </thead>
+            <tbody>${itemsHtml}</tbody>
+          </table>
+
+          <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end;">
+            <button class="export-current-audit-btn" data-audit-id="${currentAuditID}" style="background:var(--accent);color:#fff;border:1px solid var(--accent);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">Export as CSV</button>
+            <button class="close-detail-modal" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;">Close</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      // Add event listeners
+      modal.querySelectorAll('.close-detail-modal').forEach(btn => {
+        btn.addEventListener('click', function() {
+          modal.remove();
+        });
+      });
+
+      modal.querySelectorAll('.export-current-audit-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const csvAuditId = this.getAttribute('data-audit-id');
+          exportAuditCSV(csvAuditId);
+        });
+      });
+    })
+    .catch(err => {
+      alert('Error loading audit details: ' + err.message);
+    });
+}
+
+function showAuditFeedback(message) {
+  const feedback = document.createElement('div');
+  feedback.style.cssText = `
+    position:fixed;bottom:20px;right:20px;z-index:2000;
+    background:var(--accent);color:#fff;
+    padding:12px 20px;border-radius:var(--radius);
+    font-size:12px;font-weight:600;
+    box-shadow:0 4px 12px rgba(0,0,0,.15);
+    animation:slideUpBar .3s ease-out;
+  `;
+  feedback.textContent = message;
+  document.body.appendChild(feedback);
+
+  setTimeout(() => feedback.remove(), 3000);
+}
+
+function showAuditPastAudits() {
+  document.getElementById('auditChecklistSection').style.display = 'none';
+  document.getElementById('auditSummarySection').style.display = 'none';
+  document.getElementById('pastAuditsSection').style.display = 'block';
+
+  fetch('get_audits.php')
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success || !res.data) throw new Error(res.message);
+
+      const tbody = document.getElementById('pastAuditsBody');
+      if (tbody) {
+        tbody.innerHTML = res.data.map(audit => `
+          <tr style="border-bottom:1px solid var(--border);" data-audit-id="${audit.id}">
+            <td style="padding:10px 12px;text-align:left;">${formatAuditDate(audit.audit_date)}</td>
+            <td style="padding:10px 12px;text-align:left;">${escHtml(audit.admin_name)}</td>
+            <td style="padding:10px 12px;text-align:center;color:var(--accent);font-weight:600;">${audit.complete_count}</td>
+            <td style="padding:10px 12px;text-align:center;color:var(--danger);font-weight:600;">${audit.missing_count}</td>
+            <td style="padding:10px 12px;text-align:center;color:var(--warn);font-weight:600;">${audit.damaged_count}</td>
+            <td style="padding:10px 12px;text-align:center;">
+              <button class="view-audit-details-btn" data-audit-id="${audit.id}" style="background:var(--surface-2);border:1px solid var(--border);padding:5px 10px;border-radius:var(--radius);cursor:pointer;font-size:11px;">View Details</button>
+            </td>
+          </tr>
+        `).join('');
+
+        // Add event listeners to buttons
+        document.querySelectorAll('.view-audit-details-btn').forEach(btn => {
+          btn.addEventListener('click', function() {
+            const auditId = this.getAttribute('data-audit-id');
+            viewAuditDetail(auditId);
+          });
+        });
+      }
+    })
+    .catch(err => {
+      alert('Error loading past audits: ' + err.message);
+    });
+}
+
+function viewAuditDetail(auditId) {
+  if (!auditId) {
+    alert('Invalid audit ID');
+    return;
+  }
+
+  fetch('get_audit_details.php?audit_id=' + encodeURIComponent(auditId))
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message);
+
+      const modal = document.createElement('div');
+      modal.id = 'auditDetailModal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:1200;background:rgba(26,26,24,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:20px;';
+      modal.setAttribute('data-audit-id', auditId);
+
+      const itemsHtml = res.items.map(item => `
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.equipment_name)}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${item.expected_qty}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${item.actual_qty}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.status)}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.damage_notes || '')}</td>
+        </tr>
+      `).join('');
+
+      modal.innerHTML = `
+        <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);width:min(900px,100%);max-height:80vh;overflow-y:auto;padding:24px;box-shadow:var(--shadow-md);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h2 style="font-size:16px;font-weight:600;color:var(--text-1);margin:0;">Audit Details</h2>
+            <button class="close-audit-modal" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:20px;padding:0;width:30px;height:30px;">×</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px;">
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Date</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${formatAuditDate(res.audit.audit_date)}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Admin</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${escHtml(res.audit.admin_name)}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Complete</span><div style="font-size:14px;font-weight:600;color:var(--accent);">${res.audit.complete_count}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Missing</span><div style="font-size:14px;font-weight:600;color:var(--danger);">${res.audit.missing_count}</div></div>
+          </div>
+
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:var(--surface-2);">
+                <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Equipment</th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Expected</th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Actual</th>
+                <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Status</th>
+                <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Notes</th>
+              </tr>
+            </thead>
+            <tbody>${itemsHtml}</tbody>
+          </table>
+
+          <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end;">
+            <button class="export-audit-csv-btn" data-audit-id="${auditId}" style="background:var(--accent);color:#fff;border:1px solid var(--accent);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">Export as CSV</button>
+            <button class="close-audit-modal" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;">Close</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      // Add event listeners
+      modal.querySelectorAll('.close-audit-modal').forEach(btn => {
+        btn.addEventListener('click', function() {
+          modal.remove();
+        });
+      });
+
+      modal.querySelectorAll('.export-audit-csv-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const csvAuditId = this.getAttribute('data-audit-id');
+          exportAuditCSV(csvAuditId);
+        });
+      });
+    })
+    .catch(err => {
+      alert('Error loading audit details: ' + err.message);
+    });
+}
+
+function exportAuditCSV(auditId) {
+  if (!auditId) {
+    alert('Invalid audit ID');
+    return;
+  }
+  // Use window.open instead of window.location for better control
+  const url = 'export_audit_csv.php?audit_id=' + encodeURIComponent(auditId);
+  window.open(url, '_blank');
+}
+
+function closeAuditInterface() {
+  document.getElementById('auditChecklistSection').style.display = 'none';
+  document.getElementById('auditSummarySection').style.display = 'block';
+  document.getElementById('pastAuditsSection').style.display = 'none';
+
+  currentAuditID = null;
+  currentAuditData = { items: [], changes: {} };
+  auditSearchQuery = '';
+  auditStatusFilter = 'All';
+
+  const searchInput = document.getElementById('auditSearchInput');
+  const filterSelect = document.getElementById('auditStatusFilter');
+  if (searchInput) searchInput.value = '';
+  if (filterSelect) filterSelect.value = 'All';
+}
+
+function resetToAuditSummary() {
+  closeAuditInterface();
+  loadAuditSummary();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -303,6 +914,7 @@ function renderSnapshot(snap) {
     total_qty:       'Total',
     working_qty:     'Working',
     not_working_qty: 'Not Working',
+    maintenance_qty: 'Maintenance',
     description:     'Description',
   };
   let rows = '';
@@ -319,6 +931,83 @@ function escHtml(str) {
   return String(str)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+const INVENTORY_CONDITION_FIELDS = {
+  total:       { itemKey: 'total_qty',       label: 'Total',       className: 'condition-t' },
+  working:     { itemKey: 'working_qty',     label: 'Working',     className: 'condition-w' },
+  notWorking:  { itemKey: 'not_working_qty', label: 'Non-working', className: 'condition-nw' },
+  maintenance: { itemKey: 'maintenance_qty', label: 'Maintenance', className: 'condition-m' }
+};
+
+function getInventoryRowSearchText(row) {
+  if (!row?.cells) return '';
+  return Array.from(row.cells).map(cell => cell.textContent || '').join(' ').toLowerCase();
+}
+
+function renderConditionQtyInput(item, fieldKey) {
+  const field = INVENTORY_CONDITION_FIELDS[fieldKey];
+  const value = toNonNegativeInt(item[field.itemKey]) ?? 0;
+  return `<input type="number"
+    class="condition-qty-input ${field.className}"
+    min="0"
+    value="${value}"
+    data-equipment-id="${escHtml(item.equipment_id || '')}"
+    data-condition-field="${fieldKey}"
+    data-previous-value="${value}"
+    title="Update ${escHtml(field.label)} quantity"
+    onclick="event.stopPropagation()"
+    ondblclick="event.stopPropagation()"
+    onfocus="this.dataset.previousValue=this.value"
+    onchange="updateEquipmentCondition(this)">`;
+}
+
+function updateEquipmentCondition(input) {
+  if (!input) return;
+  const equipmentID = input.dataset.equipmentId || '';
+  const fieldKey = input.dataset.conditionField || '';
+  const field = INVENTORY_CONDITION_FIELDS[fieldKey];
+  const previousValue = toNonNegativeInt(input.dataset.previousValue) ?? 0;
+  const nextValue = toNonNegativeInt(input.value);
+
+  if (!equipmentID || !field) return;
+  if (nextValue === null) {
+    input.value = previousValue;
+    alert('Condition quantity must be a whole number.');
+    return;
+  }
+  if (previousValue === nextValue) return;
+
+  input.disabled = true;
+  const formData = new FormData();
+  formData.append('equipmentID', equipmentID);
+  formData.append('field', fieldKey);
+  formData.append('quantity', String(nextValue));
+
+  fetch('update_equipment_condition.php', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message || 'Unable to update condition quantity.');
+      input.dataset.previousValue = String(nextValue);
+
+      if (selectedItemData && selectedItemData.equipment_id === equipmentID) {
+        selectedItemData[field.itemKey] = nextValue;
+        if (fieldKey === 'working' && res.available != null) selectedItemData.available = res.available;
+      }
+      if (currentEditItem && currentEditItem.equipment_id === equipmentID) {
+        currentEditItem[field.itemKey] = nextValue;
+        if (fieldKey === 'working' && res.available != null) currentEditItem.available = res.available;
+      }
+
+      showInventoryFeedback(`${field.label} quantity updated to ${nextValue}`);
+    })
+    .catch(err => {
+      input.value = previousValue;
+      alert(err.message || 'Condition quantity update failed.');
+    })
+    .finally(() => {
+      input.disabled = false;
+    });
 }
 
 function getHiromiSignatureSrc() {
@@ -341,7 +1030,7 @@ function buildHiromiApprovalBlock(editable = false) {
     <div class="hiromi-esig-slot">${buildHiromiSignatureImage()}</div>
     ${editable ? `
       <label style="display:inline-block;margin:2px 0 8px 0;padding:5px 10px;border:1px solid #bbb;border-radius:4px;background:#fff;cursor:pointer;font-size:12px;">
-        Upload/Edit e-signature
+        Upload e-signature
         <input type="file" class="hiromi-esig-input" accept="image/png,image/jpeg,image/webp" style="display:none;">
       </label>
       <span class="hiromi-esig-status" style="display:block;color:#777;font-size:12px;min-height:16px;"></span>
@@ -441,20 +1130,32 @@ function validateInventoryValues(values, requireId = false) {
   const totalQty = toNonNegativeInt(values.totalQty);
   const workingQty = toNonNegativeInt(values.workingQty);
   const notWorkingQty = toNonNegativeInt(values.notWorkingQty);
+  const maintenanceQty = toNonNegativeInt(values.maintenanceQty);
 
   if (requireId && !equipmentID) return { valid: false, message: 'Equipment ID is required.' };
   if (!equipmentName) return { valid: false, message: 'Equipment Name is required.' };
   if (!accountablePerson) return { valid: false, message: 'Accountable Person is required.' };
-  if (totalQty === null || workingQty === null || notWorkingQty === null) {
-    return { valid: false, message: 'Total, Working, and Not Working must be whole numbers.' };
+  if (totalQty === null || workingQty === null || notWorkingQty === null || maintenanceQty === null) {
+    return { valid: false, message: 'Total, Working, Non-working, and Maintenance must be whole numbers.' };
   }
-  if ((workingQty + notWorkingQty) !== totalQty) {
-    return { valid: false, message: 'Working plus Not Working must equal Total Qty.' };
+  if ((workingQty + notWorkingQty + maintenanceQty) !== totalQty) {
+    return { valid: false, message: 'Working + Non-working + Maintenance must equal Total Qty.' };
   }
-  if (workingQty === 0 && notWorkingQty === 0) {
+  if (workingQty === 0 && notWorkingQty === 0 && maintenanceQty === 0) {
     return { valid: false, message: 'Select at least one condition count.' };
   }
-  return { valid: true, totalQty, workingQty, notWorkingQty };
+  return { valid: true, totalQty, workingQty, notWorkingQty, maintenanceQty };
+}
+
+function validateEquipmentDetails(values, requireId = false) {
+  const equipmentID = (values.equipmentID || '').trim();
+  const equipmentName = (values.equipmentName || '').trim();
+  const accountablePerson = (values.accountablePerson || '').trim();
+
+  if (requireId && !equipmentID) return { valid: false, message: 'Equipment ID is required.' };
+  if (!equipmentName) return { valid: false, message: 'Equipment Name is required.' };
+  if (!accountablePerson) return { valid: false, message: 'Accountable Person is required.' };
+  return { valid: true };
 }
 
 function setButtonDisabledState(btn, disabled) {
@@ -570,17 +1271,14 @@ function getInlineInventoryValues() {
   return {
     equipmentID: currentEditItem?.equipment_id || '',
     equipmentName: val('equipmentName'),
-    accountablePerson: val('accountablePerson'),
-    totalQty: val('totalQty') || String(currentEditItem?.total_qty ?? ''),
-    workingQty: val('workingQty') || String(currentEditItem?.working_qty ?? ''),
-    notWorkingQty: val('notWorkingQty') || String(currentEditItem?.not_working_qty ?? '')
+    accountablePerson: val('accountablePerson')
   };
 }
 
 function updateInlineEditSaveState() {
   if (!editingRow) return;
   const saveBtn = document.getElementById('inlineEditSaveBtn');
-  const validation = validateInventoryValues(getInlineInventoryValues());
+  const validation = validateEquipmentDetails(getInlineInventoryValues());
   setButtonDisabledState(saveBtn, !validation.valid);
   if (saveBtn) saveBtn.title = validation.valid ? '' : validation.message;
 }
@@ -593,7 +1291,8 @@ function getAddInventoryValues() {
     accountablePerson: get('accountablePerson'),
     totalQty: get('totalQty'),
     workingQty: get('workingQty'),
-    notWorkingQty: get('notWorkingQty')
+    notWorkingQty: get('notWorkingQty'),
+    maintenanceQty: get('maintenanceQty')
   };
 }
 
@@ -617,8 +1316,6 @@ function enterInlineEdit(row, item) {
   editingRow      = row;
   originalRowHTML = row.innerHTML;
   currentEditItem = item;
-
-  const borrowed = parseInt(item.available) !== parseInt(item.working_qty);
 
   // Handle image column (cell 1) separately
   const imageCell = row.cells[1];
@@ -682,18 +1379,15 @@ function enterInlineEdit(row, item) {
     imageCell.appendChild(container);
   }
 
-  // All other fields (shifted by 1 due to new image column)
+  // Equipment detail editing intentionally skips the Condition cell.
   const fields = [
     [0, 'equipmentID',       'text',     item.equipment_id,    true],
     [2, 'equipmentName',     'text',     item.equipment_name,  false],
     [3, 'serialNumber',      'text',     item.serial_number,   false],
     [4, 'internalSN',        'text',     item.internal_sn,     false],
     [5, 'accountablePerson', 'text',     item.account_person,  false],
-    [6, 'totalQty',          'number',   item.total_qty,       borrowed],
-    [7, 'workingQty',        'number',   item.working_qty,     borrowed],
-    [8, 'notWorkingQty',     'number',   item.not_working_qty, borrowed],
-    [9, 'description',       'textarea', item.description,     false],
-    // cell 10 is the history button — leave intact
+    [10, 'description',      'textarea', item.description,     false],
+    // cell 11 is the history button - leave intact
   ];
 
   fields.forEach(([cellIdx, fieldName, type, value, dis]) => {
@@ -743,26 +1437,20 @@ function saveInlineEdit() {
   const serialNumber      = val('serialNumber');
   const internalSN        = val('internalSN');
   const accountablePerson = val('accountablePerson');
-  const totalQty          = val('totalQty')      || String(currentEditItem.total_qty);
-  const workingQty        = val('workingQty')    || String(currentEditItem.working_qty);
-  const notWorkingQty     = val('notWorkingQty') || String(currentEditItem.not_working_qty);
+  const totalQty          = String(currentEditItem.total_qty ?? 0);
+  const workingQty        = String(currentEditItem.working_qty ?? 0);
+  const notWorkingQty     = String(currentEditItem.not_working_qty ?? 0);
+  const maintenanceQty    = String(currentEditItem.maintenance_qty ?? 0);
   const description       = val('description');
 
-  const validation = validateInventoryValues({
+  const validation = validateEquipmentDetails({
     equipmentName,
-    accountablePerson,
-    totalQty,
-    workingQty,
-    notWorkingQty
+    accountablePerson
   });
   if (!validation.valid) {
     alert(validation.message);
     return;
   }
-
-  const previousNotWorking = parseInt(currentEditItem.not_working_qty, 10) || 0;
-  const nextNotWorking = validation.notWorkingQty;
-  if (!confirmRiskyInventoryUpdate(previousNotWorking, nextNotWorking)) return;
 
   const saveBtn = document.getElementById('inlineEditSaveBtn');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
@@ -776,6 +1464,7 @@ function saveInlineEdit() {
   formData.append('totalQty', totalQty);
   formData.append('workingQty', workingQty);
   formData.append('notWorkingQty', notWorkingQty);
+  formData.append('maintenanceQty', maintenanceQty);
   formData.append('description', description);
   formData.append('accountablePerson', accountablePerson);
 
@@ -811,7 +1500,7 @@ function saveInlineEdit() {
         selectedRow = null; selectedItemData = null;
         loadInventory();
         loadInventoryPreview();
-        showInventoryFeedback(buildInventoryUpdateMessage(equipmentName, previousNotWorking, nextNotWorking));
+        showInventoryFeedback(`Inventory updated: ${equipmentName} saved`);
       } else {
         alert('Error saving: ' + (res.message || 'Unknown error'));
         if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save changes'; }
@@ -834,9 +1523,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('addEquipmentBtn').onclick = () => {
     selectedItemData = null; canEditQty = true;
     ['equipmentID','equipmentName','serialNumber','internalSN',
-     'accountablePerson','totalQty','workingQty','notWorkingQty','description']
+     'accountablePerson','totalQty','workingQty','notWorkingQty','maintenanceQty','description']
       .forEach(id => { document.getElementById(id).value = ''; });
-    ['equipmentID','totalQty','workingQty','notWorkingQty']
+    const maintenanceInput = document.getElementById('maintenanceQty');
+    if (maintenanceInput) maintenanceInput.value = '0';
+    ['equipmentID','totalQty','workingQty','notWorkingQty','maintenanceQty']
       .forEach(id => { document.getElementById(id).disabled = false; });
     openAddEquipmentModal();
     updateAddEquipmentSaveState();
@@ -860,7 +1551,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // FIX 2: SUBMIT ADD MODAL — after success, call saveEquipmentLog + loadInventory
-  ['equipmentID','equipmentName','accountablePerson','totalQty','workingQty','notWorkingQty']
+  ['equipmentID','equipmentName','accountablePerson','totalQty','workingQty','notWorkingQty','maintenanceQty']
     .forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -878,6 +1569,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const totalQty          = document.getElementById('totalQty').value.trim();
     const workingQty        = document.getElementById('workingQty').value.trim();
     const notWorkingQty     = document.getElementById('notWorkingQty').value.trim();
+    const maintenanceQty    = document.getElementById('maintenanceQty').value.trim();
     const description       = document.getElementById('description').value.trim();
     const accountablePerson = document.getElementById('accountablePerson').value.trim();
 
@@ -887,7 +1579,8 @@ document.addEventListener('DOMContentLoaded', () => {
       accountablePerson,
       totalQty,
       workingQty,
-      notWorkingQty
+      notWorkingQty,
+      maintenanceQty
     }, true);
     if (!validation.valid) { alert(validation.message); return; }
     if (currentEquipmentIDs.has(equipmentID)) {
@@ -898,7 +1591,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $.ajax({
       url: 'add_equipment.php', method: 'POST',
       data: { equipmentID, equipmentName, serialNumber, internalSN,
-              totalQty, workingQty, notWorkingQty, description, accountablePerson },
+              totalQty, workingQty, notWorkingQty, maintenanceQty, description, accountablePerson },
       // FIX: removed dataType:'json' to avoid false error triggers
       success: function(rawData) {
         let data;
@@ -921,7 +1614,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
           selectedRow = null; selectedItemData = null;
           ['equipmentID','equipmentName','serialNumber','internalSN','totalQty',
-           'workingQty','notWorkingQty','description','accountablePerson']
+           'workingQty','notWorkingQty','maintenanceQty','description','accountablePerson']
             .forEach(id => { document.getElementById(id).value = ''; });
 
           // FIX 3: reload inventory immediately so new equipment shows without page refresh
@@ -1042,6 +1735,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:center;">${row.total_qty}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:center;color:var(--accent);">${row.working_qty}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:center;color:var(--danger);">${row.not_working_qty}</td>
+        <td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:center;color:var(--warn);">${row.maintenance_qty || 0}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);color:var(--text-3);font-size:12px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
             title="${escHtml(row.description || '')}">${escHtml(row.description || '—')}</td>`;
       tbody.appendChild(tr);
@@ -1114,14 +1808,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const kw  = searchInput.value.toLowerCase();
     const map = { equipment:'e', measuring:'m', chemicals:'c', books:'b' };
     document.getElementById('equipmentList').querySelectorAll('tr').forEach(row => {
-      if (!row.cells || row.cells.length < 8) return;
+      if (!row.cells || row.cells.length < 12) return;
       const id   = row.cells[0].textContent.trim();
-      const w    = parseInt(row.cells[6]?.textContent.trim(), 10);
-      const nw   = parseInt(row.cells[7]?.textContent.trim(), 10);
-      const text = row.textContent.toLowerCase();
+      const total = parseInt(row.cells[6]?.querySelector('input')?.value ?? row.cells[6]?.textContent, 10) || 0;
+      const w = parseInt(row.cells[7]?.querySelector('input')?.value ?? row.cells[7]?.textContent, 10) || 0;
+      const nw = parseInt(row.cells[8]?.querySelector('input')?.value ?? row.cells[8]?.textContent, 10) || 0;
+      const m = parseInt(row.cells[9]?.querySelector('input')?.value ?? row.cells[9]?.textContent, 10) || 0;
+      const text = getInventoryRowSearchText(row);
       let show   = true;
-      if (fv === 'working')         show = w  > 0;
+      if (fv === 'totalqty')        show = total > 0;
+      else if (fv === 'working')    show = w > 0;
       else if (fv === 'notworking') show = nw > 0;
+      else if (fv === 'maintenance') show = m > 0;
       else if (fv !== 'all')        show = id.charAt(0).toLowerCase() === map[fv];
       row.style.display = (show && text.includes(kw)) ? '' : 'none';
     });
@@ -1173,9 +1871,10 @@ function loadInventory() {
           <td>${item.serial_number  ?? ''}</td>
           <td>${item.internal_sn   ?? ''}</td>
           <td>${item.account_person ?? ''}</td>
-          <td>${item.total_qty     ?? 0}</td>
-          <td>${item.working_qty   ?? 0}</td>
-          <td>${item.not_working_qty ?? 0}</td>
+          <td>${renderConditionQtyInput(item, 'total')}</td>
+          <td>${renderConditionQtyInput(item, 'working')}</td>
+          <td>${renderConditionQtyInput(item, 'notWorking')}</td>
+          <td>${renderConditionQtyInput(item, 'maintenance')}</td>
           <td>${item.description   ?? ''}</td>
           <td class="hist-cell">
             <button class="hist-btn" title="View history"
@@ -1192,7 +1891,7 @@ function loadInventory() {
 
         // Single click → select row (highlight)
         row.addEventListener('click', function(e) {
-          if (e.target.closest('.hist-btn')) return;
+          if (e.target.closest('.hist-btn') || e.target.closest('.condition-qty-input')) return;
           if (editingRow === row) return;
           if (editingRow && editingRow !== row) { cancelInlineEdit(); return; }
 
@@ -1204,7 +1903,7 @@ function loadInventory() {
 
         // Double click → enter inline edit immediately
         row.addEventListener('dblclick', function(e) {
-          if (e.target.closest('.hist-btn')) return;
+          if (e.target.closest('.hist-btn') || e.target.closest('.condition-qty-input')) return;
           if (editingRow && editingRow !== row) cancelInlineEdit();
           enterInlineEdit(row, item);
         });
@@ -1217,20 +1916,24 @@ function loadInventory() {
       const kw  = document.getElementById('searchInput')?.value.toLowerCase() || '';
       const map = { equipment:'e', measuring:'m', chemicals:'c', books:'b' };
       container.querySelectorAll('tr').forEach(r => {
-        if (!r.cells || r.cells.length < 9) return;
+        if (!r.cells || r.cells.length < 12) return;
         const id   = r.cells[0].textContent.trim();
-        const w    = parseInt(r.cells[7]?.textContent.trim(), 10);
-        const nw   = parseInt(r.cells[8]?.textContent.trim(), 10);
-        const text = r.textContent.toLowerCase();
+        const total = parseInt(r.cells[6]?.querySelector('input')?.value ?? r.cells[6]?.textContent, 10) || 0;
+        const w = parseInt(r.cells[7]?.querySelector('input')?.value ?? r.cells[7]?.textContent, 10) || 0;
+        const nw = parseInt(r.cells[8]?.querySelector('input')?.value ?? r.cells[8]?.textContent, 10) || 0;
+        const m = parseInt(r.cells[9]?.querySelector('input')?.value ?? r.cells[9]?.textContent, 10) || 0;
+        const text = getInventoryRowSearchText(r);
         let show   = true;
-        if (fv === 'working')         show = w  > 0;
+        if (fv === 'totalqty')        show = total > 0;
+        else if (fv === 'working')    show = w > 0;
         else if (fv === 'notworking') show = nw > 0;
+        else if (fv === 'maintenance') show = m > 0;
         else if (fv !== 'all')        show = id.charAt(0).toLowerCase() === map[fv];
         r.style.display = (show && text.includes(kw)) ? '' : 'none';
       });
     },
     error: function() {
-      container.innerHTML = '<tr><td colspan="11">Error loading inventory</td></tr>';
+      container.innerHTML = '<tr><td colspan="12">Error loading inventory</td></tr>';
     }
   });
 }
@@ -1619,6 +2322,7 @@ function loadInventoryPreview() {
         <td class="centered-cell">${item.total_qty       ?? 0}</td>
         <td class="centered-cell">${item.working_qty     ?? 0}</td>
         <td class="centered-cell">${item.not_working_qty ?? 0}</td>
+        <td class="centered-cell">${item.maintenance_qty ?? 0}</td>
         <td class="centered-cell">${item.description     ?? ''}</td>`;
       body.appendChild(row);
     });

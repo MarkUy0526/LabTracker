@@ -1,9 +1,8 @@
 <?php
 require 'db.php';
+require 'equipment_condition_helpers.php';
 
 header('Content-Type: application/json');
-
-// ── PH Time for all timestamps ──
 date_default_timezone_set('Asia/Manila');
 
 if ($conn->connect_error) {
@@ -11,58 +10,78 @@ if ($conn->connect_error) {
     exit();
 }
 
-$equipmentID      = trim($_POST['equipmentID']      ?? '');
-$equipmentName    = trim($_POST['equipmentName']    ?? '');
-$serialNumber     = trim($_POST['serialNumber']     ?? '');
-$internalSN       = trim($_POST['internalSN']       ?? '');
-$totalQty         = trim($_POST['totalQty']         ?? '');
-$workingQty       = trim($_POST['workingQty']       ?? '');
-$notWorkingQty    = trim($_POST['notWorkingQty']    ?? '');
-$description      = trim($_POST['description']      ?? '');
-$accountablePerson= trim($_POST['accountablePerson']?? '');
+ensureEquipmentMaintenanceColumn($conn);
 
-if ($equipmentID === '' || $equipmentName === '' || $totalQty === '' ||
-    $workingQty === '' || $notWorkingQty === '' || $accountablePerson === '') {
+$equipmentID       = trim($_POST['equipmentID']       ?? '');
+$equipmentName     = trim($_POST['equipmentName']     ?? '');
+$serialNumber      = trim($_POST['serialNumber']      ?? '');
+$internalSN        = trim($_POST['internalSN']        ?? '');
+$totalQty          = trim($_POST['totalQty']          ?? '');
+$workingQty        = trim($_POST['workingQty']        ?? '');
+$notWorkingQty     = trim($_POST['notWorkingQty']     ?? '');
+$maintenanceQty    = trim($_POST['maintenanceQty']    ?? '0');
+$description       = trim($_POST['description']       ?? '');
+$accountablePerson = trim($_POST['accountablePerson'] ?? '');
+
+if (
+    $equipmentID === '' || $equipmentName === '' || $totalQty === '' ||
+    $workingQty === '' || $notWorkingQty === '' || $maintenanceQty === '' ||
+    $accountablePerson === ''
+) {
     echo json_encode(['success' => false, 'message' => 'Missing required fields.']);
     exit();
 }
 
-if (!ctype_digit($totalQty) || !ctype_digit($workingQty) || !ctype_digit($notWorkingQty)) {
-    echo json_encode(['success' => false, 'message' => 'Total, Working, and Not Working must be whole numbers.']);
+if (
+    !ctype_digit($totalQty) || !ctype_digit($workingQty) ||
+    !ctype_digit($notWorkingQty) || !ctype_digit($maintenanceQty)
+) {
+    echo json_encode(['success' => false, 'message' => 'Total, Working, Non-working, and Maintenance must be whole numbers.']);
     exit();
 }
 
-$totalQty      = (int) $totalQty;
-$workingQty    = (int) $workingQty;
-$notWorkingQty = (int) $notWorkingQty;
-$available     = $workingQty;
+$totalQty       = (int) $totalQty;
+$workingQty     = (int) $workingQty;
+$notWorkingQty  = (int) $notWorkingQty;
+$maintenanceQty = (int) $maintenanceQty;
+$available      = $workingQty;
 
-if ($workingQty + $notWorkingQty !== $totalQty) {
-    echo json_encode(['success' => false, 'message' => 'Working plus Not Working must equal Total Qty.']);
+if ($workingQty + $notWorkingQty + $maintenanceQty !== $totalQty) {
+    echo json_encode(['success' => false, 'message' => 'Working + Non-working + Maintenance must equal Total Qty.']);
     exit();
 }
 
-if ($workingQty === 0 && $notWorkingQty === 0) {
+if ($workingQty === 0 && $notWorkingQty === 0 && $maintenanceQty === 0) {
     echo json_encode(['success' => false, 'message' => 'Select at least one condition count.']);
     exit();
 }
 
-// ── INSERT equipment ──
 $stmt = $conn->prepare(
     "INSERT INTO equipment
      (equipment_id, equipment_name, serial_number, internal_sn,
-      total_qty, working_qty, not_working_qty, description, account_person, available)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      total_qty, working_qty, not_working_qty, maintenance_qty,
+      description, account_person, available)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 );
+
 if (!$stmt) {
     echo json_encode(['success' => false, 'message' => 'SQL prepare failed: ' . $conn->error]);
     exit();
 }
 
 $stmt->bind_param(
-    "ssssiiissi",
-    $equipmentID, $equipmentName, $serialNumber, $internalSN,
-    $totalQty, $workingQty, $notWorkingQty, $description, $accountablePerson, $available
+    "ssssiiiissi",
+    $equipmentID,
+    $equipmentName,
+    $serialNumber,
+    $internalSN,
+    $totalQty,
+    $workingQty,
+    $notWorkingQty,
+    $maintenanceQty,
+    $description,
+    $accountablePerson,
+    $available
 );
 
 if (!$stmt->execute()) {
@@ -73,8 +92,6 @@ if (!$stmt->execute()) {
 }
 $stmt->close();
 
-// ── LOG the ADD action ──
-// Store a full JSON snapshot of the new equipment as new_value
 $snapshot = json_encode([
     'equipment_name'  => $equipmentName,
     'serial_number'   => $serialNumber,
@@ -83,11 +100,12 @@ $snapshot = json_encode([
     'total_qty'       => $totalQty,
     'working_qty'     => $workingQty,
     'not_working_qty' => $notWorkingQty,
+    'maintenance_qty' => $maintenanceQty,
     'description'     => $description,
 ], JSON_UNESCAPED_UNICODE);
 
-$now     = date('Y-m-d H:i:s');   // Asia/Manila — set above
-$action  = 'Added';
+$now    = date('Y-m-d H:i:s');
+$action = 'Added';
 
 $logStmt = $conn->prepare(
     "INSERT INTO equipment_history

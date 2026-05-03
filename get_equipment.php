@@ -1,5 +1,8 @@
 <?php
 require 'db.php';
+require 'equipment_condition_helpers.php';
+
+ensureEquipmentMaintenanceColumn($conn);
 
 $sql = "SELECT 
     equipment_id, 
@@ -10,6 +13,7 @@ $sql = "SELECT
     total_qty, 
     working_qty, 
     not_working_qty, 
+    maintenance_qty,
     available,
     description 
     FROM equipment";

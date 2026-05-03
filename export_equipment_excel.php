@@ -7,7 +7,9 @@ use PhpOffice\PhpSpreadsheet\Style\Color;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 
 include 'db.php';
+require 'equipment_condition_helpers.php';
 
+ensureEquipmentMaintenanceColumn($conn);
 $sql = "SELECT * FROM equipment"; 
 $result = $conn->query($sql);
 
@@ -19,7 +21,7 @@ $spreadsheet = new Spreadsheet();
 $sheet = $spreadsheet->getActiveSheet();
 
 $sheet->fromArray([
-    'Equipment ID', 'Equipment', 'SN', 'ISN', 'ACC Person', 'T', 'W', 'NW', 'Description'
+    'Equipment ID', 'Equipment', 'SN', 'ISN', 'ACC Person', 'T', 'W', 'NW', 'M', 'Description'
 ], NULL, 'A1');
 
 $headerStyle = [
@@ -39,7 +41,7 @@ $headerStyle = [
     ],
 ];
 
-$sheet->getStyle('A1:I1')->applyFromArray($headerStyle);
+$sheet->getStyle('A1:J1')->applyFromArray($headerStyle);
 
 $rowNum = 2;
 while ($row = $result->fetch_assoc()) {
@@ -52,6 +54,7 @@ while ($row = $result->fetch_assoc()) {
         $row['total_qty'],
         $row['working_qty'],
         $row['not_working_qty'],
+        $row['maintenance_qty'],
         $row['description']
     ], NULL, "A$rowNum");
     $rowNum++;

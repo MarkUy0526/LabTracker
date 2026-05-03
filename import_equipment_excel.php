@@ -4,6 +4,9 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 
 header("Content-Type: application/json");
 include 'db.php';
+require 'equipment_condition_helpers.php';
+
+ensureEquipmentMaintenanceColumn($conn);
 
 if (!isset($_FILES['excelFile']) || $_FILES['excelFile']['error'] !== UPLOAD_ERR_OK) {
     echo json_encode(["success" => false, "message" => "Upload error."]);
@@ -15,6 +18,9 @@ $preview = isset($_POST['preview']) && $_POST['preview'] === '1';
 $spreadsheet = IOFactory::load($_FILES['excelFile']['tmp_name']);
 $sheet       = $spreadsheet->getActiveSheet();
 $rows        = $sheet->toArray(null, true, true, false);
+$header      = $rows[0] ?? [];
+$conditionMHeader = strtoupper(trim((string)($header[8] ?? '')));
+$hasMaintenanceColumn = in_array($conditionMHeader, ['M', 'MAINTENANCE', 'MAINTENANCE QTY'], true);
 
 // Skip header row (index 0), collect data rows
 $dataRows = [];
@@ -32,7 +38,8 @@ for ($i = 1; $i < count($rows); $i++) {
         'total_qty'      => (int)($r[5] ?? 0),
         'working_qty'    => (int)($r[6] ?? 0),
         'not_working_qty'=> (int)($r[7] ?? 0),
-        'description'    => trim((string)($r[8] ?? '')),
+        'maintenance_qty'=> $hasMaintenanceColumn ? (int)($r[8] ?? 0) : 0,
+        'description'    => trim((string)($r[$hasMaintenanceColumn ? 9 : 8] ?? '')),
     ];
 }
 
@@ -90,28 +97,28 @@ foreach ($dataRows as $r) {
                 UPDATE equipment SET
                     equipment_name = ?, serial_number = ?, internal_sn = ?,
                     account_person = ?, total_qty = ?, working_qty = ?,
-                    not_working_qty = ?, available = ?, description = ?
+                    not_working_qty = ?, maintenance_qty = ?, available = ?, description = ?
                 WHERE equipment_id = ?
             ");
             $updateStmt->bind_param(
-                "ssssiiiiss",
+                "ssssiiiiiss",
                 $r['equipment_name'], $r['serial_number'], $r['internal_sn'],
                 $r['account_person'], $r['total_qty'], $r['working_qty'],
-                $r['not_working_qty'], $available, $r['description'], $r['equipment_id']
+                $r['not_working_qty'], $r['maintenance_qty'], $available, $r['description'], $r['equipment_id']
             );
         } else {
             $updateStmt = $conn->prepare("
                 UPDATE equipment SET
                     equipment_name = ?, serial_number = ?, internal_sn = ?,
                     account_person = ?, total_qty = ?, working_qty = ?,
-                    not_working_qty = ?, available = ?
+                    not_working_qty = ?, maintenance_qty = ?, available = ?
                 WHERE equipment_id = ?
             ");
             $updateStmt->bind_param(
-                "ssssiiiis",
+                "ssssiiiiis",
                 $r['equipment_name'], $r['serial_number'], $r['internal_sn'],
                 $r['account_person'], $r['total_qty'], $r['working_qty'],
-                $r['not_working_qty'], $available, $r['equipment_id']
+                $r['not_working_qty'], $r['maintenance_qty'], $available, $r['equipment_id']
             );
         }
         if ($updateStmt->execute()) $updated++;
@@ -121,14 +128,14 @@ foreach ($dataRows as $r) {
         $insertStmt = $conn->prepare("
             INSERT INTO equipment
             (equipment_id, equipment_name, serial_number, internal_sn, account_person,
-             total_qty, working_qty, not_working_qty, available, description)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             total_qty, working_qty, not_working_qty, maintenance_qty, available, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $insertStmt->bind_param(
-            "sssssiiiis",
+            "sssssiiiiis",
             $r['equipment_id'], $r['equipment_name'], $r['serial_number'], $r['internal_sn'],
             $r['account_person'], $r['total_qty'], $r['working_qty'], $r['not_working_qty'],
-            $available, $r['description']
+            $r['maintenance_qty'], $available, $r['description']
         );
         if ($insertStmt->execute()) $inserted++;
         $insertStmt->close();

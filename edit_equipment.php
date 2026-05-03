@@ -2,46 +2,22 @@
 header('Content-Type: application/json');
 require 'db.php';
 
-// ── PH Time for all timestamps ──
 date_default_timezone_set('Asia/Manila');
 
-$equipmentID       = $conn->real_escape_string($_POST['equipmentID']       ?? '');
-$equipmentName     = $conn->real_escape_string($_POST['equipmentName']     ?? '');
-$serialNumber      = $conn->real_escape_string($_POST['serialNumber']      ?? '');
-$internalSN        = $conn->real_escape_string($_POST['internalSN']        ?? '');
-$totalQtyRaw       = trim($_POST['totalQty']      ?? '');
-$workingQtyRaw     = trim($_POST['workingQty']    ?? '');
-$notWorkingQtyRaw  = trim($_POST['notWorkingQty'] ?? '');
-$totalQty          = (int) $totalQtyRaw;
-$workingQty        = (int) $workingQtyRaw;
-$notWorkingQty     = (int) $notWorkingQtyRaw;
-$description       = $conn->real_escape_string($_POST['description']       ?? '');
-$accountablePerson = $conn->real_escape_string($_POST['accountablePerson'] ?? '');
+$equipmentID       = trim($_POST['equipmentID']       ?? '');
+$equipmentName     = trim($_POST['equipmentName']     ?? '');
+$serialNumber      = trim($_POST['serialNumber']      ?? '');
+$internalSN        = trim($_POST['internalSN']        ?? '');
+$description       = trim($_POST['description']       ?? '');
+$accountablePerson = trim($_POST['accountablePerson'] ?? '');
 
-if (empty($equipmentID) || empty($equipmentName) || empty($accountablePerson)) {
+if ($equipmentID === '' || $equipmentName === '' || $accountablePerson === '') {
     echo json_encode(["success" => false, "message" => "Missing required fields."]);
     exit;
 }
 
-// ── Fetch current values BEFORE updating (for old vs new comparison) ──
-if (!ctype_digit($totalQtyRaw) || !ctype_digit($workingQtyRaw) || !ctype_digit($notWorkingQtyRaw)) {
-    echo json_encode(["success" => false, "message" => "Total, Working, and Not Working must be whole numbers."]);
-    exit;
-}
-
-if ($workingQty + $notWorkingQty !== $totalQty) {
-    echo json_encode(["success" => false, "message" => "Working plus Not Working must equal Total Qty."]);
-    exit;
-}
-
-if ($workingQty === 0 && $notWorkingQty === 0) {
-    echo json_encode(["success" => false, "message" => "Select at least one condition count."]);
-    exit;
-}
-
 $oldStmt = $conn->prepare(
-    "SELECT equipment_name, serial_number, internal_sn, account_person,
-            total_qty, working_qty, not_working_qty, description
+    "SELECT equipment_name, serial_number, internal_sn, account_person, description
      FROM equipment WHERE equipment_id = ? LIMIT 1"
 );
 $oldData = [];
@@ -53,51 +29,57 @@ if ($oldStmt) {
     $oldStmt->close();
 }
 
-// ── UPDATE equipment ──
-$sql = "UPDATE equipment SET
-            equipment_name   = '$equipmentName',
-            serial_number    = '$serialNumber',
-            internal_sn      = '$internalSN',
-            account_person   = '$accountablePerson',
-            total_qty        = $totalQty,
-            working_qty      = $workingQty,
-            not_working_qty  = $notWorkingQty,
-            available        = $workingQty,
-            description      = '$description'
-        WHERE equipment_id   = '$equipmentID'";
+$stmt = $conn->prepare(
+    "UPDATE equipment SET
+        equipment_name = ?,
+        serial_number = ?,
+        internal_sn = ?,
+        account_person = ?,
+        description = ?
+     WHERE equipment_id = ?"
+);
 
-if ($conn->query($sql) !== true) {
-    echo json_encode(["success" => false, "message" => "Error: " . $conn->error]);
+if (!$stmt) {
+    echo json_encode(["success" => false, "message" => "Prepare failed: " . $conn->error]);
     $conn->close();
     exit;
 }
 
-// ── LOG each changed field ──
-// Map DB column names to human-readable labels
+$stmt->bind_param(
+    "ssssss",
+    $equipmentName,
+    $serialNumber,
+    $internalSN,
+    $accountablePerson,
+    $description,
+    $equipmentID
+);
+
+if (!$stmt->execute()) {
+    echo json_encode(["success" => false, "message" => "Error: " . $stmt->error]);
+    $stmt->close();
+    $conn->close();
+    exit;
+}
+$stmt->close();
+
 $fieldLabels = [
-    'equipment_name'  => 'Equipment Name',
-    'serial_number'   => 'Serial Number',
-    'internal_sn'     => 'Internal SN',
-    'account_person'  => 'Accountable Person',
-    'total_qty'       => 'Total Qty',
-    'working_qty'     => 'Working Qty',
-    'not_working_qty' => 'Not Working Qty',
-    'description'     => 'Description',
+    'equipment_name' => 'Equipment Name',
+    'serial_number'  => 'Serial Number',
+    'internal_sn'    => 'Internal SN',
+    'account_person' => 'Accountable Person',
+    'description'    => 'Description',
 ];
 
-// New values keyed the same way as oldData
 $newData = [
-    'equipment_name'  => $equipmentName,
-    'serial_number'   => $serialNumber,
-    'internal_sn'     => $internalSN,
-    'account_person'  => $accountablePerson,
-    'total_qty'       => (string) $totalQty,
-    'working_qty'     => (string) $workingQty,
-    'not_working_qty' => (string) $notWorkingQty,
-    'description'     => $description,
+    'equipment_name' => $equipmentName,
+    'serial_number'  => $serialNumber,
+    'internal_sn'    => $internalSN,
+    'account_person' => $accountablePerson,
+    'description'    => $description,
 ];
 
-$now    = date('Y-m-d H:i:s');   // Asia/Manila — set above
+$now    = date('Y-m-d H:i:s');
 $action = 'Edited';
 
 $logStmt = $conn->prepare(
@@ -111,11 +93,15 @@ if ($logStmt && !empty($oldData)) {
         $oldVal = (string) ($oldData[$col] ?? '');
         $newVal = $newData[$col] ?? '';
 
-        // Only log fields that actually changed
         if ($oldVal !== $newVal) {
             $logStmt->bind_param(
                 "ssssss",
-                $equipmentID, $action, $label, $oldVal, $newVal, $now
+                $equipmentID,
+                $action,
+                $label,
+                $oldVal,
+                $newVal,
+                $now
             );
             $logStmt->execute();
         }
@@ -123,21 +109,18 @@ if ($logStmt && !empty($oldData)) {
     $logStmt->close();
 }
 
-// ── HANDLE IMAGE UPLOAD ──
 if (!empty($_FILES['equipment_image']['name'])) {
     $imageDir = __DIR__ . '/equipment_images';
 
-    // Create directory if it doesn't exist
     if (!is_dir($imageDir)) {
         mkdir($imageDir, 0755, true);
     }
 
     $file = $_FILES['equipment_image'];
     $allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    $maxSize = 5 * 1024 * 1024; // 5MB
+    $maxSize = 5 * 1024 * 1024;
 
-    // Validate file
-    if (!in_array($file['type'], $allowedTypes)) {
+    if (!in_array($file['type'], $allowedTypes, true)) {
         echo json_encode(["success" => false, "message" => "Invalid image type. Only JPG, PNG, and WebP are allowed."]);
         $conn->close();
         exit;
@@ -155,15 +138,13 @@ if (!empty($_FILES['equipment_image']['name'])) {
         exit;
     }
 
-    // Get file extension
-    $ext = match($file['type']) {
+    $ext = match ($file['type']) {
         'image/jpeg' => 'jpg',
         'image/png'  => 'png',
         'image/webp' => 'webp',
         default => 'jpg'
     };
 
-    // Delete old images with any extension
     foreach (['jpg', 'png', 'webp'] as $oldExt) {
         $oldPath = $imageDir . '/' . $equipmentID . '.' . $oldExt;
         if (file_exists($oldPath)) {
@@ -171,7 +152,6 @@ if (!empty($_FILES['equipment_image']['name'])) {
         }
     }
 
-    // Save new image
     $imagePath = $imageDir . '/' . $equipmentID . '.' . $ext;
     if (!move_uploaded_file($file['tmp_name'], $imagePath)) {
         echo json_encode(["success" => false, "message" => "Failed to save image."]);
