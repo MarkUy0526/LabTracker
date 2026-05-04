@@ -697,8 +697,8 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
                 <thead style="position:sticky;top:0;background:var(--surface-2);z-index:1;">
                   <tr>
                     <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);">Equipment Name</th>
-                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:100px;">Expected</th>
-                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:100px;">Actual</th>
+                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:150px;">Expected<br><span style="font-weight:400;">T / W / NW / M</span></th>
+                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:250px;">Actual<br><span style="font-weight:400;">T / W / NW / M</span></th>
                     <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:140px;">Status</th>
                     <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);">Damage Notes</th>
                   </tr>
@@ -973,6 +973,6 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
     </div>
   </div>
 
-  <script src="admin.js?v=20260501d"></script>
+  <script src="admin.js?v=20260505a"></script>
 </body>
 </html>

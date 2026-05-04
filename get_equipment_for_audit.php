@@ -9,10 +9,14 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
 }
 
 require 'db.php';
+require 'equipment_condition_helpers.php';
 
 try {
+  ensureEquipmentMaintenanceColumn($conn);
+  ensureAuditItemConditionColumns($conn);
+
   $query = "
-    SELECT equipment_id, equipment_name, total_qty, account_person, description
+    SELECT equipment_id, equipment_name, total_qty, working_qty, not_working_qty, maintenance_qty, account_person, description
     FROM equipment
     ORDER BY equipment_name ASC
   ";
@@ -29,9 +33,15 @@ try {
       'equipment_id' => $row['equipment_id'],
       'equipment_name' => $row['equipment_name'],
       'expected_qty' => (int)$row['total_qty'],
+      'expected_working_qty' => (int)$row['working_qty'],
+      'expected_not_working_qty' => (int)$row['not_working_qty'],
+      'expected_maintenance_qty' => (int)$row['maintenance_qty'],
       'account_person' => $row['account_person'],
       'description' => $row['description'],
-      'actual_qty' => 0,
+      'actual_qty' => (int)$row['total_qty'],
+      'actual_working_qty' => (int)$row['working_qty'],
+      'actual_not_working_qty' => (int)$row['not_working_qty'],
+      'actual_maintenance_qty' => (int)$row['maintenance_qty'],
       'status' => 'Complete',
       'damage_notes' => ''
     ];

@@ -237,21 +237,131 @@ function loadAuditChecklistItems() {
     });
 }
 
+function auditCount(value) {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function auditConditionTotal(item) {
+  return auditCount(item.actual_working_qty)
+    + auditCount(item.actual_not_working_qty)
+    + auditCount(item.actual_maintenance_qty);
+}
+
+function allocateAuditQuantities(total, working, notWorking, maintenance) {
+  total = auditCount(total);
+  working = auditCount(working);
+  notWorking = auditCount(notWorking);
+  maintenance = auditCount(maintenance);
+  const basisTotal = working + notWorking + maintenance;
+
+  if (total === 0) return { working: 0, notWorking: 0, maintenance: 0 };
+  if (basisTotal === 0) return { working: total, notWorking: 0, maintenance: 0 };
+
+  let nextWorking = Math.round(total * (working / basisTotal));
+  let nextNotWorking = Math.round(total * (notWorking / basisTotal));
+  let nextMaintenance = Math.round(total * (maintenance / basisTotal));
+  let diff = total - (nextWorking + nextNotWorking + nextMaintenance);
+
+  if (diff > 0) {
+    nextWorking += diff;
+  } else if (diff < 0) {
+    let remaining = Math.abs(diff);
+    const takeWorking = Math.min(nextWorking, remaining);
+    nextWorking -= takeWorking;
+    remaining -= takeWorking;
+    const takeNotWorking = Math.min(nextNotWorking, remaining);
+    nextNotWorking -= takeNotWorking;
+    remaining -= takeNotWorking;
+    nextMaintenance -= Math.min(nextMaintenance, remaining);
+  }
+
+  return { working: nextWorking, notWorking: nextNotWorking, maintenance: nextMaintenance };
+}
+
+function normalizeAuditItemQuantities(item) {
+  item.expected_qty = auditCount(item.expected_qty);
+  item.expected_working_qty = auditCount(item.expected_working_qty);
+  item.expected_not_working_qty = auditCount(item.expected_not_working_qty);
+  item.expected_maintenance_qty = auditCount(item.expected_maintenance_qty);
+
+  if (item.expected_working_qty + item.expected_not_working_qty + item.expected_maintenance_qty === 0 && item.expected_qty > 0) {
+    item.expected_working_qty = item.expected_qty;
+  }
+
+  const hasActualBreakdown = ['actual_working_qty', 'actual_not_working_qty', 'actual_maintenance_qty']
+    .some(key => Object.prototype.hasOwnProperty.call(item, key));
+
+  item.actual_qty = auditCount(item.actual_qty);
+  item.actual_working_qty = auditCount(item.actual_working_qty);
+  item.actual_not_working_qty = auditCount(item.actual_not_working_qty);
+  item.actual_maintenance_qty = auditCount(item.actual_maintenance_qty);
+
+  if (!hasActualBreakdown && item.actual_qty > 0) {
+    const allocated = allocateAuditQuantities(
+      item.actual_qty,
+      item.expected_working_qty,
+      item.expected_not_working_qty,
+      item.expected_maintenance_qty
+    );
+    item.actual_working_qty = allocated.working;
+    item.actual_not_working_qty = allocated.notWorking;
+    item.actual_maintenance_qty = allocated.maintenance;
+  } else {
+    item.actual_qty = auditConditionTotal(item);
+  }
+}
+
+function formatAuditQtyGroup(item, prefix) {
+  const total = auditCount(item[`${prefix}_qty`]);
+  const working = auditCount(item[`${prefix}_working_qty`]);
+  const notWorking = auditCount(item[`${prefix}_not_working_qty`]);
+  const maintenance = auditCount(item[`${prefix}_maintenance_qty`]);
+  return `${total} / ${working} / ${notWorking} / ${maintenance}`;
+}
+
+function updateAuditRowStatus(item, row) {
+  const statusSelect = row.querySelector('.audit-status-select');
+  if (statusSelect && statusSelect.value !== 'Damaged') {
+    if (item.actual_qty === item.expected_qty) {
+      item.status = 'Complete';
+      statusSelect.value = 'Complete';
+    } else if (item.actual_qty < item.expected_qty) {
+      item.status = 'Missing';
+      statusSelect.value = 'Missing';
+    } else {
+      item.status = 'Complete';
+      statusSelect.value = 'Complete';
+    }
+  }
+}
+
 function renderAuditChecklistTable() {
   const tbody = document.getElementById('auditItemsBody');
   if (!tbody) return;
 
   tbody.innerHTML = currentAuditData.items.map((item, idx) => {
-    const actualQty = item.actual_qty || 0;
+    normalizeAuditItemQuantities(item);
     const status = determineAuditStatus(item);
     return `
       <tr data-equipment-id="${escHtml(item.equipment_id)}" data-index="${idx}" style="border-bottom:1px solid var(--border);">
         <td style="padding:10px 12px;text-align:left;">${escHtml(item.equipment_name)}</td>
-        <td style="padding:10px 12px;text-align:center;color:var(--text-2);">${item.expected_qty}</td>
+        <td style="padding:10px 12px;text-align:center;color:var(--text-2);font-family:var(--mono);font-size:12px;">${formatAuditQtyGroup(item, 'expected')}</td>
         <td style="padding:10px 12px;text-align:center;">
-          <input type="number" min="0" value="${actualQty}" class="audit-qty-input"
-                 style="width:70px;text-align:center;padding:5px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text-1);font-family:var(--font);font-size:12px;outline:none;"
-                 data-index="${idx}" />
+          <div style="display:grid;grid-template-columns:repeat(4,54px);gap:5px;justify-content:center;">
+            <input type="number" min="0" value="${item.actual_qty}" class="audit-total-input"
+                   title="Actual Total" data-index="${idx}"
+                   style="width:54px;text-align:center;padding:5px 4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text-1);font-family:var(--font);font-size:12px;outline:none;" />
+            <input type="number" min="0" value="${item.actual_working_qty}" class="audit-condition-input"
+                   title="Actual Working" data-index="${idx}" data-field="actual_working_qty"
+                   style="width:54px;text-align:center;padding:5px 4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--accent);font-family:var(--font);font-size:12px;outline:none;" />
+            <input type="number" min="0" value="${item.actual_not_working_qty}" class="audit-condition-input"
+                   title="Actual Not Working" data-index="${idx}" data-field="actual_not_working_qty"
+                   style="width:54px;text-align:center;padding:5px 4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--danger);font-family:var(--font);font-size:12px;outline:none;" />
+            <input type="number" min="0" value="${item.actual_maintenance_qty}" class="audit-condition-input"
+                   title="Actual Maintenance" data-index="${idx}" data-field="actual_maintenance_qty"
+                   style="width:54px;text-align:center;padding:5px 4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--warn);font-family:var(--font);font-size:12px;outline:none;" />
+          </div>
         </td>
         <td style="padding:10px 12px;text-align:left;">
           <select class="audit-status-select" data-index="${idx}"
@@ -269,26 +379,46 @@ function renderAuditChecklistTable() {
   }).join('');
 
   // Add event listeners after rendering
-  tbody.querySelectorAll('.audit-qty-input').forEach(input => {
+  tbody.querySelectorAll('.audit-total-input').forEach(input => {
     input.addEventListener('change', function() {
       const idx = parseInt(this.getAttribute('data-index'));
       const row = this.closest('tr');
       if (idx >= 0 && row) {
         const item = currentAuditData.items[idx];
         if (item) {
-          item.actual_qty = parseInt(this.value) || 0;
+          const nextTotal = auditCount(this.value);
+          const allocated = allocateAuditQuantities(
+            nextTotal,
+            item.actual_working_qty || item.expected_working_qty,
+            item.actual_not_working_qty || item.expected_not_working_qty,
+            item.actual_maintenance_qty || item.expected_maintenance_qty
+          );
+          item.actual_working_qty = allocated.working;
+          item.actual_not_working_qty = allocated.notWorking;
+          item.actual_maintenance_qty = allocated.maintenance;
+          item.actual_qty = nextTotal;
+          row.querySelector('[data-field="actual_working_qty"]').value = allocated.working;
+          row.querySelector('[data-field="actual_not_working_qty"]').value = allocated.notWorking;
+          row.querySelector('[data-field="actual_maintenance_qty"]').value = allocated.maintenance;
+          updateAuditRowStatus(item, row);
+          filterAuditItems();
+        }
+      }
+    });
+  });
 
-          // Auto-update status if not manually set to Damaged
-          const statusSelect = row.querySelector('.audit-status-select');
-          if (statusSelect && statusSelect.value !== 'Damaged') {
-            if (item.actual_qty === item.expected_qty) {
-              item.status = 'Complete';
-              statusSelect.value = 'Complete';
-            } else if (item.actual_qty < item.expected_qty) {
-              item.status = 'Missing';
-              statusSelect.value = 'Missing';
-            }
-          }
+  tbody.querySelectorAll('.audit-condition-input').forEach(input => {
+    input.addEventListener('change', function() {
+      const idx = parseInt(this.getAttribute('data-index'));
+      const field = this.getAttribute('data-field');
+      const row = this.closest('tr');
+      if (idx >= 0 && field && row) {
+        const item = currentAuditData.items[idx];
+        if (item) {
+          item[field] = auditCount(this.value);
+          item.actual_qty = auditConditionTotal(item);
+          row.querySelector('.audit-total-input').value = item.actual_qty;
+          updateAuditRowStatus(item, row);
           filterAuditItems();
         }
       }
@@ -323,6 +453,7 @@ function renderAuditChecklistTable() {
 
 function determineAuditStatus(item) {
   if (item.status === 'Damaged') return 'Damaged';
+  normalizeAuditItemQuantities(item);
   if (item.actual_qty === item.expected_qty) return 'Complete';
   if (item.actual_qty < item.expected_qty) return 'Missing';
   return 'Complete';
@@ -377,7 +508,13 @@ function saveDraftAudit() {
     equipment_id: item.equipment_id,
     equipment_name: item.equipment_name,
     expected_qty: item.expected_qty,
+    expected_working_qty: item.expected_working_qty || 0,
+    expected_not_working_qty: item.expected_not_working_qty || 0,
+    expected_maintenance_qty: item.expected_maintenance_qty || 0,
     actual_qty: item.actual_qty || 0,
+    actual_working_qty: item.actual_working_qty || 0,
+    actual_not_working_qty: item.actual_not_working_qty || 0,
+    actual_maintenance_qty: item.actual_maintenance_qty || 0,
     status: item.status || 'Complete',
     damage_notes: item.damage_notes || ''
   }));
@@ -417,7 +554,13 @@ function submitAudit() {
     equipment_id: item.equipment_id,
     equipment_name: item.equipment_name,
     expected_qty: item.expected_qty,
+    expected_working_qty: item.expected_working_qty || 0,
+    expected_not_working_qty: item.expected_not_working_qty || 0,
+    expected_maintenance_qty: item.expected_maintenance_qty || 0,
     actual_qty: item.actual_qty || 0,
+    actual_working_qty: item.actual_working_qty || 0,
+    actual_not_working_qty: item.actual_not_working_qty || 0,
+    actual_maintenance_qty: item.actual_maintenance_qty || 0,
     status: item.status || 'Complete',
     damage_notes: item.damage_notes || ''
   }));
@@ -484,8 +627,8 @@ function viewCurrentAuditDetail() {
       const itemsHtml = res.items.map(item => `
         <tr>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.equipment_name)}</td>
-          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${item.expected_qty}</td>
-          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${item.actual_qty}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;font-family:var(--mono);">${formatAuditQtyGroup(item, 'expected')}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;font-family:var(--mono);">${formatAuditQtyGroup(item, 'actual')}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.status)}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.damage_notes || '')}</td>
         </tr>
@@ -509,8 +652,8 @@ function viewCurrentAuditDetail() {
             <thead>
               <tr style="background:var(--surface-2);">
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Equipment</th>
-                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Expected</th>
-                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Actual</th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Expected T/W/NW/M</th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Actual T/W/NW/M</th>
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Status</th>
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Notes</th>
               </tr>
@@ -620,8 +763,8 @@ function viewAuditDetail(auditId) {
       const itemsHtml = res.items.map(item => `
         <tr>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.equipment_name)}</td>
-          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${item.expected_qty}</td>
-          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${item.actual_qty}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;font-family:var(--mono);">${formatAuditQtyGroup(item, 'expected')}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;font-family:var(--mono);">${formatAuditQtyGroup(item, 'actual')}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.status)}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.damage_notes || '')}</td>
         </tr>
@@ -645,8 +788,8 @@ function viewAuditDetail(auditId) {
             <thead>
               <tr style="background:var(--surface-2);">
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Equipment</th>
-                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Expected</th>
-                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Actual</th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Expected T/W/NW/M</th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Actual T/W/NW/M</th>
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Status</th>
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Notes</th>
               </tr>
@@ -735,6 +878,8 @@ function importAuditToInventory(auditId) {
     .then(r => r.json())
     .then(res => {
       if (!res.success) throw new Error(res.message);
+      loadInventory();
+      loadInventoryPreview();
       showAuditFeedback('✅ Imported! Updated ' + res.updated_count + ' equipment items');
       setTimeout(() => {
         alert('Inventory updated successfully!\n\n' + res.updated_count + ' equipment items were updated with audit data.');

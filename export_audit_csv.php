@@ -8,8 +8,11 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
 }
 
 require 'db.php';
+require 'equipment_condition_helpers.php';
 
 try {
+  ensureAuditItemConditionColumns($conn);
+
   $audit_id = isset($_GET['audit_id']) ? (int)$_GET['audit_id'] : null;
 
   if (!$audit_id) {
@@ -34,7 +37,18 @@ try {
 
   // Get audit items
   $items_stmt = $conn->prepare("
-    SELECT equipment_name, expected_qty, actual_qty, status, damage_notes
+    SELECT
+      equipment_name,
+      expected_qty,
+      expected_working_qty,
+      expected_not_working_qty,
+      expected_maintenance_qty,
+      actual_qty,
+      actual_working_qty,
+      actual_not_working_qty,
+      actual_maintenance_qty,
+      status,
+      damage_notes
     FROM audit_items
     WHERE audit_id = ?
     ORDER BY equipment_name ASC
@@ -62,14 +76,36 @@ try {
   fputcsv($output, []);
 
   // Write items table header
-  fputcsv($output, ['Equipment Name', 'Expected Qty', 'Actual Qty', 'Status', 'Damage Notes']);
+  fputcsv($output, ['Equipment Name', 'Expected T', 'Expected W', 'Expected NW', 'Expected M', 'Actual T', 'Actual W', 'Actual NW', 'Actual M', 'Status', 'Damage Notes']);
 
   // Write items
   while ($row = $items_result->fetch_assoc()) {
+    $expectedQty = (int)$row['expected_qty'];
+    $expectedWorking = (int)$row['expected_working_qty'];
+    $expectedNotWorking = (int)$row['expected_not_working_qty'];
+    $expectedMaintenance = (int)$row['expected_maintenance_qty'];
+    if ($expectedQty > 0 && $expectedWorking + $expectedNotWorking + $expectedMaintenance === 0) {
+      [$expectedWorking, $expectedNotWorking, $expectedMaintenance] = allocateConditionQuantities($expectedQty, $expectedQty, 0, 0);
+    }
+
+    $actualQty = (int)$row['actual_qty'];
+    $actualWorking = (int)$row['actual_working_qty'];
+    $actualNotWorking = (int)$row['actual_not_working_qty'];
+    $actualMaintenance = (int)$row['actual_maintenance_qty'];
+    if ($actualQty > 0 && $actualWorking + $actualNotWorking + $actualMaintenance === 0) {
+      [$actualWorking, $actualNotWorking, $actualMaintenance] = allocateConditionQuantities($actualQty, $expectedWorking, $expectedNotWorking, $expectedMaintenance);
+    }
+
     fputcsv($output, [
       $row['equipment_name'],
-      $row['expected_qty'],
-      $row['actual_qty'],
+      $expectedQty,
+      $expectedWorking,
+      $expectedNotWorking,
+      $expectedMaintenance,
+      $actualQty,
+      $actualWorking,
+      $actualNotWorking,
+      $actualMaintenance,
       $row['status'],
       $row['damage_notes']
     ]);

@@ -9,8 +9,12 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
 }
 
 require 'db.php';
+require 'equipment_condition_helpers.php';
 
 try {
+  ensureEquipmentMaintenanceColumn($conn);
+  ensureAuditItemConditionColumns($conn);
+
   $data = json_decode(file_get_contents('php://input'), true);
 
   if (!isset($data['audit_id'])) {
@@ -21,7 +25,13 @@ try {
 
   // Get all audit items
   $items_stmt = $conn->prepare("
-    SELECT ai.equipment_id, ai.actual_qty, ai.status
+    SELECT
+      ai.equipment_id,
+      ai.actual_qty,
+      ai.actual_working_qty,
+      ai.actual_not_working_qty,
+      ai.actual_maintenance_qty,
+      ai.status
     FROM audit_items ai
     WHERE ai.audit_id = ?
   ");
@@ -35,11 +45,14 @@ try {
   while ($item = $items_result->fetch_assoc()) {
     $equipment_id = $item['equipment_id'];
     $actual_qty = (int)$item['actual_qty'];
+    $actual_working = max(0, (int)$item['actual_working_qty']);
+    $actual_not_working = max(0, (int)$item['actual_not_working_qty']);
+    $actual_maintenance = max(0, (int)$item['actual_maintenance_qty']);
     $status = $item['status'];
 
-    // Get current equipment data to maintain proportions
+    // Get current equipment data for fallback allocation and available recalculation.
     $eq_stmt = $conn->prepare("
-      SELECT total_qty, working_qty, not_working_qty, maintenance_qty
+      SELECT total_qty, working_qty, not_working_qty, maintenance_qty, available
       FROM equipment
       WHERE equipment_id = ?
     ");
@@ -53,45 +66,35 @@ try {
       $old_working = (int)$eq['working_qty'];
       $old_not_working = (int)$eq['not_working_qty'];
       $old_maintenance = (int)$eq['maintenance_qty'];
+      $old_available = (int)$eq['available'];
 
-      // Calculate new quantities maintaining proportions
-      $new_working = 0;
-      $new_not_working = 0;
-      $new_maintenance = 0;
-
-      if ($old_total > 0) {
-        $working_ratio = $old_working / $old_total;
-        $not_working_ratio = $old_not_working / $old_total;
-        $maintenance_ratio = $old_maintenance / $old_total;
-
-        $new_working = (int)round($actual_qty * $working_ratio);
-        $new_not_working = (int)round($actual_qty * $not_working_ratio);
-        $new_maintenance = (int)round($actual_qty * $maintenance_ratio);
-
-        // Ensure total matches exactly
-        $calc_total = $new_working + $new_not_working + $new_maintenance;
-        $diff = $actual_qty - $calc_total;
-        if ($diff > 0) {
-          $new_working += $diff;
-        } elseif ($diff < 0) {
-          if ($new_not_working >= abs($diff)) {
-            $new_not_working += $diff;
-          } else {
-            $new_working += $diff;
-          }
-        }
+      if ($actual_working + $actual_not_working + $actual_maintenance > 0 || $actual_qty === 0) {
+        $new_working = $actual_working;
+        $new_not_working = $actual_not_working;
+        $new_maintenance = $actual_maintenance;
+        $actual_qty = $new_working + $new_not_working + $new_maintenance;
       } else {
-        // If old total is 0, just set working
-        $new_working = $actual_qty;
+        [$new_working, $new_not_working, $new_maintenance] = allocateConditionQuantities(
+          $actual_qty,
+          $old_working,
+          $old_not_working,
+          $old_maintenance
+        );
       }
+
+      $borrowed_qty = max(0, $old_working - $old_available);
+      if ($new_working < $borrowed_qty) {
+        throw new Exception("Working quantity for {$equipment_id} cannot be lower than currently borrowed quantity ({$borrowed_qty}).");
+      }
+      $new_available = $new_working - $borrowed_qty;
 
       // Update equipment with new quantities
       $update_stmt = $conn->prepare("
         UPDATE equipment
-        SET total_qty = ?, working_qty = ?, not_working_qty = ?, maintenance_qty = ?
+        SET total_qty = ?, working_qty = ?, not_working_qty = ?, maintenance_qty = ?, available = ?
         WHERE equipment_id = ?
       ");
-      $update_stmt->bind_param("iiiss", $actual_qty, $new_working, $new_not_working, $new_maintenance, $equipment_id);
+      $update_stmt->bind_param("iiiiis", $actual_qty, $new_working, $new_not_working, $new_maintenance, $new_available, $equipment_id);
 
       if ($update_stmt->execute()) {
         $updated_count++;
@@ -107,7 +110,7 @@ try {
     'updated_count' => $updated_count
   ]);
 } catch (Exception $e) {
-  if ($conn->connect_errno) {
+  if (isset($conn) && !$conn->connect_errno) {
     $conn->rollback();
   }
   http_response_code(500);
