@@ -736,6 +736,10 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
                 <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Damaged</div>
               </div>
             </div>
+            <input type="hidden" id="currentAuditIdStorage" value="">
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px;">
+              <button onclick="importAuditToInventory(document.getElementById('currentAuditIdStorage').value)" style="background:var(--accent);color:#fff;border:1px solid var(--accent);padding:10px 18px;font-weight:600;border-radius:var(--radius);cursor:pointer;">📥 Import Results to Inventory</button>
+            </div>
           </div>
         </div>
 

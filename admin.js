@@ -450,6 +450,9 @@ function submitAudit() {
       document.getElementById('auditChecklistSection').style.display = 'none';
       document.getElementById('auditSummarySection').style.display = 'block';
 
+      // Store audit ID in hidden field
+      document.getElementById('currentAuditIdStorage').value = currentAuditID;
+
       document.getElementById('summaryTotal').textContent = res.summary.total_items;
       document.getElementById('summaryComplete').textContent = res.summary.complete_count;
       document.getElementById('summaryMissing').textContent = res.summary.missing_count;
@@ -708,6 +711,38 @@ function closeAuditInterface() {
 function resetToAuditSummary() {
   closeAuditInterface();
   loadAuditSummary();
+}
+
+function importAuditToInventory(auditId) {
+  const audit_id = auditId || currentAuditID;
+
+  console.log('importAuditToInventory called:', { auditId, currentAuditID, audit_id });
+
+  if (!audit_id) {
+    alert('No active audit');
+    return;
+  }
+
+  const itemCount = currentAuditData.items?.length || 'all';
+  const confirmed = confirm('This will update ' + itemCount + ' equipment quantities in the inventory based on audit results.\n\nContinue?');
+  if (!confirmed) return;
+
+  fetch('import_audit_to_inventory.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audit_id: audit_id })
+  })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message);
+      showAuditFeedback('✅ Imported! Updated ' + res.updated_count + ' equipment items');
+      setTimeout(() => {
+        alert('Inventory updated successfully!\n\n' + res.updated_count + ' equipment items were updated with audit data.');
+      }, 500);
+    })
+    .catch(err => {
+      alert('Error importing to inventory: ' + err.message);
+    });
 }
 
 // ════════════════════════════════════════════════════════════════
