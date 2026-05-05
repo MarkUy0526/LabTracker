@@ -874,7 +874,64 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
     <!-- ═══════════════════ REPORTS ═══════════════════ -->
     <div id="reportsSection" style="display:none;">
       <div class="page-header"><h1>Reports</h1></div>
-      <div id="reportsList" style="display:flex;flex-direction:column;gap:10px;"></div>
+      <div class="inv-tab-row">
+        <button class="inv-tab-btn active" id="reportsTabListBtn" onclick="switchReportsTab('list')">Report Entries</button>
+        <button class="inv-tab-btn" id="reportsTabSummaryBtn" onclick="switchReportsTab('summary')">Summary</button>
+      </div>
+
+      <div class="inv-tab-panel active" id="reportsPanelList">
+        <div class="reports-filter-row">
+          <div class="reports-search-field">
+            <label for="reportsSearch">Search</label>
+            <input type="search" id="reportsSearch" placeholder="Borrower, guest, instructor, room">
+          </div>
+          <div>
+            <label for="reportsStatusFilter">Status</label>
+            <select id="reportsStatusFilter">
+              <option value="All">All</option>
+              <option value="Accepted">Accepted</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </div>
+          <div>
+            <label for="reportsFrom">From</label>
+            <input type="date" id="reportsFrom">
+          </div>
+          <div>
+            <label for="reportsTo">To</label>
+            <input type="date" id="reportsTo">
+          </div>
+          <button id="reportsFilterBtn" class="primary">Filter</button>
+          <button id="reportsClearBtn">Clear</button>
+        </div>
+
+        <div id="reportsList" style="display:flex;flex-direction:column;gap:10px;"></div>
+
+        <div class="reports-pagination" id="reportsPagination">
+          <div class="reports-page-summary" id="reportsPageSummary">Showing 0-0 of 0 reports</div>
+          <div class="reports-page-controls">
+            <button type="button" class="reports-page-btn" data-page-action="first">&lt;&lt;</button>
+            <button type="button" class="reports-page-btn" data-page-action="prev">&lt;</button>
+            <div class="reports-page-numbers" id="reportsPageNumbers"></div>
+            <button type="button" class="reports-page-btn" data-page-action="next">&gt;</button>
+            <button type="button" class="reports-page-btn" data-page-action="last">&gt;&gt;</button>
+          </div>
+          <div class="reports-page-options">
+            <label for="reportsGoToPage">Go to</label>
+            <input type="number" id="reportsGoToPage" min="1" value="1">
+            <label for="reportsRowsPerPage">Rows</label>
+            <select id="reportsRowsPerPage">
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="25">25</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="inv-tab-panel" id="reportsPanelSummary">
+        <div id="reportsSummaryMount"></div>
+      </div>
     </div>
 
   </div><!-- /main-content -->

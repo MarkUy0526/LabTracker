@@ -1697,6 +1697,511 @@ function saveInlineEdit() {
 // ════════════════════════════════════════════════════════════════
 // DOCUMENT READY
 // ════════════════════════════════════════════════════════════════
+const reportsState = {
+  data: [],
+  filteredData: [],
+  currentPage: 1,
+  rowsPerPage: 10,
+  search: '',
+  status: 'All',
+  from: '',
+  to: ''
+};
+
+function moveScheduleSummaryToReports() {
+  const summary = document.getElementById('statsSummary');
+  const mount = document.getElementById('reportsSummaryMount');
+  if (!summary || !mount) return;
+  if (summary.parentElement !== mount) mount.appendChild(summary);
+  summary.style.marginTop = '0';
+}
+
+function switchReportsTab(tab) {
+  moveScheduleSummaryToReports();
+  document.getElementById('reportsPanelList')?.classList.toggle('active', tab === 'list');
+  document.getElementById('reportsPanelSummary')?.classList.toggle('active', tab === 'summary');
+  document.getElementById('reportsTabListBtn')?.classList.toggle('active', tab === 'list');
+  document.getElementById('reportsTabSummaryBtn')?.classList.toggle('active', tab === 'summary');
+
+  if (tab === 'summary') {
+    initScheduleCharts();
+    setTimeout(() => {
+      if (trendChart && typeof trendChart.resize === 'function') trendChart.resize();
+    }, 80);
+  }
+}
+
+function initReportsControls() {
+  moveScheduleSummaryToReports();
+
+  const rowsSelect = document.getElementById('reportsRowsPerPage');
+  if (rowsSelect) reportsState.rowsPerPage = parseInt(rowsSelect.value, 10) || reportsState.rowsPerPage;
+
+  document.getElementById('reportsSearch')?.addEventListener('input', e => {
+    reportsState.search = e.target.value.trim().toLowerCase();
+    applyReportsFilters(true);
+    renderReportsPage();
+  });
+
+  document.getElementById('reportsStatusFilter')?.addEventListener('change', e => {
+    reportsState.status = e.target.value || 'All';
+    applyReportsFilters(true);
+    renderReportsPage();
+  });
+
+  document.getElementById('reportsFrom')?.addEventListener('change', e => {
+    reportsState.from = e.target.value || '';
+    applyReportsFilters(true);
+    renderReportsPage();
+  });
+
+  document.getElementById('reportsTo')?.addEventListener('change', e => {
+    reportsState.to = e.target.value || '';
+    applyReportsFilters(true);
+    renderReportsPage();
+  });
+
+  document.getElementById('reportsFilterBtn')?.addEventListener('click', () => {
+    reportsState.from = document.getElementById('reportsFrom')?.value || '';
+    reportsState.to = document.getElementById('reportsTo')?.value || '';
+    applyReportsFilters(true);
+    renderReportsPage();
+  });
+
+  document.getElementById('reportsClearBtn')?.addEventListener('click', () => {
+    const search = document.getElementById('reportsSearch');
+    const status = document.getElementById('reportsStatusFilter');
+    const from = document.getElementById('reportsFrom');
+    const to = document.getElementById('reportsTo');
+    if (search) search.value = '';
+    if (status) status.value = 'All';
+    if (from) from.value = '';
+    if (to) to.value = '';
+    reportsState.search = '';
+    reportsState.status = 'All';
+    reportsState.from = '';
+    reportsState.to = '';
+    applyReportsFilters(true);
+    renderReportsPage();
+  });
+
+  rowsSelect?.addEventListener('change', e => {
+    reportsState.rowsPerPage = parseInt(e.target.value, 10) || 10;
+    reportsState.currentPage = 1;
+    renderReportsPage();
+  });
+
+  document.getElementById('reportsGoToPage')?.addEventListener('change', e => {
+    setReportsPage(parseInt(e.target.value, 10) || 1);
+  });
+
+  document.getElementById('reportsGoToPage')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') setReportsPage(parseInt(e.target.value, 10) || 1);
+  });
+
+  document.getElementById('reportsPagination')?.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn || btn.disabled) return;
+    const action = btn.dataset.pageAction;
+    const totalPages = getReportsTotalPages();
+    if (btn.dataset.page) {
+      setReportsPage(parseInt(btn.dataset.page, 10));
+    } else if (action === 'first') {
+      setReportsPage(1);
+    } else if (action === 'prev') {
+      setReportsPage(reportsState.currentPage - 1);
+    } else if (action === 'next') {
+      setReportsPage(reportsState.currentPage + 1);
+    } else if (action === 'last') {
+      setReportsPage(totalPages);
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', initReportsControls);
+
+function getReportDate(entry) {
+  return String(entry.borrowRequest?.date || '').split(/[T\s]/)[0];
+}
+
+function getReportSearchText(entry) {
+  const req = entry.borrowRequest || {};
+  const equipment = (entry.equipmentList || []).map(eq => eq.equipment_name).join(' ');
+  return [
+    req.borrower_name,
+    req.guest_number,
+    req.student_id,
+    req.instructor_name,
+    req.subject_code,
+    req.department,
+    req.room,
+    req.status,
+    req.usage_date,
+    req.date,
+    equipment
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function applyReportsFilters(resetPage = false) {
+  reportsState.filteredData = reportsState.data.filter(entry => {
+    const req = entry.borrowRequest || {};
+    const date = getReportDate(entry);
+    const matchesSearch = !reportsState.search || getReportSearchText(entry).includes(reportsState.search);
+    const matchesStatus = reportsState.status === 'All' || req.status === reportsState.status;
+    const matchesFrom = !reportsState.from || (date && date >= reportsState.from);
+    const matchesTo = !reportsState.to || (date && date <= reportsState.to);
+    return matchesSearch && matchesStatus && matchesFrom && matchesTo;
+  });
+
+  if (resetPage) reportsState.currentPage = 1;
+  reportsState.currentPage = Math.min(Math.max(reportsState.currentPage, 1), getReportsTotalPages());
+}
+
+function getReportsTotalPages() {
+  return Math.max(1, Math.ceil(reportsState.filteredData.length / reportsState.rowsPerPage));
+}
+
+function setReportsPage(page) {
+  reportsState.currentPage = Math.min(Math.max(page, 1), getReportsTotalPages());
+  renderReportsPage();
+}
+
+function getReportsVisibleEntries() {
+  const start = (reportsState.currentPage - 1) * reportsState.rowsPerPage;
+  return reportsState.filteredData.slice(start, start + reportsState.rowsPerPage);
+}
+
+function getReportPageNumbers() {
+  const totalPages = getReportsTotalPages();
+  const maxButtons = 5;
+  let start = Math.max(1, reportsState.currentPage - Math.floor(maxButtons / 2));
+  let end = Math.min(totalPages, start + maxButtons - 1);
+  start = Math.max(1, end - maxButtons + 1);
+  const pages = [];
+  for (let page = start; page <= end; page++) pages.push(page);
+  return pages;
+}
+
+function updateReportsPagination() {
+  const total = reportsState.filteredData.length;
+  const totalPages = getReportsTotalPages();
+  const start = total ? ((reportsState.currentPage - 1) * reportsState.rowsPerPage) + 1 : 0;
+  const end = total ? Math.min(start + reportsState.rowsPerPage - 1, total) : 0;
+  const summary = document.getElementById('reportsPageSummary');
+  const pageNumbers = document.getElementById('reportsPageNumbers');
+  const goTo = document.getElementById('reportsGoToPage');
+
+  if (summary) summary.textContent = `Showing ${start}-${end} of ${total} reports`;
+  if (goTo) {
+    goTo.value = reportsState.currentPage;
+    goTo.max = totalPages;
+  }
+
+  if (pageNumbers) {
+    pageNumbers.innerHTML = '';
+    if (total > 0) {
+      getReportPageNumbers().forEach(page => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'reports-page-btn' + (page === reportsState.currentPage ? ' active' : '');
+        btn.dataset.page = String(page);
+        btn.textContent = String(page);
+        pageNumbers.appendChild(btn);
+      });
+    }
+  }
+
+  document.querySelectorAll('[data-page-action="first"], [data-page-action="prev"]').forEach(btn => {
+    btn.disabled = reportsState.currentPage <= 1 || total === 0;
+  });
+  document.querySelectorAll('[data-page-action="next"], [data-page-action="last"]').forEach(btn => {
+    btn.disabled = reportsState.currentPage >= totalPages || total === 0;
+  });
+}
+
+function renderReportCard(entry) {
+  const req = entry.borrowRequest;
+  const eqList = entry.equipmentList || [];
+  const reqId = req.id;
+  const isAccepted = req.status === 'Accepted';
+  const statusColor = isAccepted ? 'var(--accent)' : 'var(--danger)';
+  const statusBg = isAccepted ? 'var(--accent-soft)' : 'var(--danger-soft)';
+
+  const eqRows = eqList.map(eq => {
+    const returnedVal = eq.returned_on || '';
+    const remarksVal = eq.remarks || '';
+    if (isAccepted) {
+      return `
+        <tr data-eq-name="${escHtml(eq.equipment_name)}">
+          <td style="padding:6px 10px;border-bottom:1px solid var(--border);">${escHtml(eq.equipment_name)}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:center;">${eq.quantity}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:center;">
+            <input type="date" class="return-date-input" value="${escHtml(returnedVal)}"
+              style="font-family:var(--font);font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-1);width:130px;">
+          </td>
+          <td style="padding:6px 10px;border-bottom:1px solid var(--border);">
+            ${buildReturnRemarksControl(remarksVal, eq.quantity)}
+          </td>
+        </tr>`;
+    }
+    return `
+      <tr>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);">${escHtml(eq.equipment_name)}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:center;">${eq.quantity}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:center;">${returnedVal ? formatDateToDDMMYYYY(returnedVal) : '&mdash;'}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);">${escHtml(remarksVal || '-')}</td>
+      </tr>`;
+  }).join('');
+
+  const card = document.createElement('div');
+  card.className = 'report-entry';
+  card.dataset.reqId = reqId;
+  card.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <span style="font-weight:600;font-size:14px;">${escHtml(req.borrower_name)}</span>
+        <span style="color:var(--text-3);font-size:12px;margin-left:8px;">Guest #${escHtml(req.guest_number)}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="background:${statusBg};color:${statusColor};font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;">${escHtml(req.status)}</span>
+        <button class="downloadPdfBtn" data-req-id="${reqId}"
+          style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">PDF</button>
+        ${isAccepted ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
+          style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">Save Return Info</button>` : ''}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;font-size:13px;color:var(--text-2);margin-bottom:12px;">
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Student ID</span><br>${escHtml(req.student_id || '-')}</div>
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Instructor</span><br>${escHtml(req.instructor_name || '-')}</div>
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Subject Code</span><br>${escHtml(req.subject_code || '-')}</div>
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Department</span><br>${escHtml(req.department || '-')}</div>
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Room</span><br>${escHtml(req.room || '-')}</div>
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Usage Date</span><br>${formatDateToDDMMYYYY(req.usage_date)}</div>
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Request Date</span><br>${formatDateToDDMMYYYY(req.date)}</div>
+    </div>
+    ${eqRows.length ? `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;" class="report-eq-table">
+      <thead>
+        <tr style="background:var(--surface-2);">
+          <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Equipment</th>
+          <th style="padding:6px 10px;text-align:center;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Qty</th>
+          <th style="padding:6px 10px;text-align:center;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Returned On</th>
+          <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Remarks</th>
+        </tr>
+      </thead>
+      <tbody>${eqRows}</tbody>
+    </table>` : '<div style="font-size:12px;color:var(--text-3);">No equipment listed.</div>'}`;
+
+  return card;
+}
+
+function updateReportsReturnInfo(reqId, returnedItems) {
+  [reportsState.data, reportsState.filteredData].forEach(list => {
+    const entry = list.find(item => item.borrowRequest?.id == reqId);
+    if (!entry) return;
+    returnedItems.forEach(item => {
+      const eq = (entry.equipmentList || []).find(e => e.equipment_name === item.equipment_name);
+      if (eq) {
+        eq.returned_on = item.returned_on;
+        eq.remarks = item.remarks;
+      }
+    });
+  });
+}
+
+function wireReportCardControls(container) {
+  container.querySelectorAll('.return-remarks-select').forEach(select => {
+    select.addEventListener('change', () => {
+      const customInput = select.closest('td')?.querySelector('.return-remarks-other-input');
+      if (!customInput) return;
+      customInput.style.display = select.value === '__other__' ? 'block' : 'none';
+      if (select.value === '__other__') customInput.focus();
+    });
+  });
+
+  container.querySelectorAll('.saveReturnInfoBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const reqId = btn.dataset.reqId;
+      const card = container.querySelector(`.report-entry[data-req-id="${reqId}"]`);
+      if (!card) return;
+
+      const returnedItems = [];
+      card.querySelectorAll('tr[data-eq-name]').forEach(row => {
+        returnedItems.push({
+          equipment_name: row.dataset.eqName,
+          returned_on: row.querySelector('.return-date-input')?.value || '',
+          remarks: getReturnRemarksValue(row)
+        });
+      });
+
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+
+      fetch('update_return_info.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ borrow_request_id: reqId, returned_items: returnedItems })
+      })
+      .then(r => r.json())
+      .then(res => {
+        if (res.success) {
+          updateReportsReturnInfo(reqId, returnedItems);
+          btn.textContent = 'Saved';
+          btn.style.background = 'var(--accent-soft)';
+          btn.style.color = 'var(--accent)';
+          btn.style.borderColor = 'var(--accent)';
+          setTimeout(() => {
+            btn.textContent = 'Save Return Info';
+            btn.style.cssText = '';
+            btn.disabled = false;
+          }, 2000);
+        } else {
+          alert('Save failed: ' + (res.message || 'Unknown error'));
+          btn.disabled = false;
+          btn.textContent = 'Save Return Info';
+        }
+      })
+      .catch(err => {
+        console.error('Save return info error:', err);
+        alert('Network error saving return info.');
+        btn.disabled = false;
+        btn.textContent = 'Save Return Info';
+      });
+    });
+  });
+
+  container.querySelectorAll('.downloadPdfBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const reqId = btn.dataset.reqId;
+      const entry = reportsState.data.find(item => item.borrowRequest?.id == reqId);
+      const req = entry?.borrowRequest;
+      const eqList = entry?.equipmentList || [];
+      const card = container.querySelector(`.report-entry[data-req-id="${reqId}"]`);
+      if (!req) return;
+
+      const currentReturnInfo = new Map();
+      card?.querySelectorAll('tr[data-eq-name]').forEach(row => {
+        currentReturnInfo.set(row.dataset.eqName, {
+          returned_on: row.querySelector('.return-date-input')?.value || '',
+          remarks: getReturnRemarksValue(row)
+        });
+      });
+
+      const eqRows = eqList.map(eq => {
+        const liveInfo = currentReturnInfo.get(eq.equipment_name) || {};
+        const returnedOn = liveInfo.returned_on ?? eq.returned_on;
+        const remarks = liveInfo.remarks ?? eq.remarks;
+        return `
+          <tr>
+            <td style="border: 1px solid #000; padding: 8px;">${escHtml(eq.equipment_name)}</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">${eq.quantity}</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">YES</td>
+            <td style="border: 1px solid #000; padding: 8px;">${returnedOn ? formatDateToDDMMYYYY(returnedOn) : '-'}</td>
+            <td style="border: 1px solid #000; padding: 8px;">${escHtml(remarks || '-')}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const formHtml = `
+        <div style="font-family: Arial, sans-serif; font-size: 12px; padding: 20px; max-width: 800px; margin: 0 auto;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h3 style="margin: 4px 0;">EULOGIO "AMANG" RODRIGUEZ INSTITUTE OF SCIENCE AND TECHNOLOGY</h3>
+            <h3 style="margin: 4px 0;">COLLEGE OF ARTS AND SCIENCES</h3>
+            <h3 style="margin: 4px 0;">APPLIED PHYSICS DEPARTMENT</h3>
+            <h2 style="margin: 10px 0;">Equipment-borrowing Form</h2>
+          </div>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <tr><td style="padding: 5px;"><strong>Guest Login Number:</strong> ${escHtml(req.guest_number)}</td><td style="padding: 5px;"><strong>Date:</strong> ${formatDateToDDMMYYYY(req.date)}</td></tr>
+            <tr><td style="padding: 5px;"><strong>Borrower's Name:</strong> ${escHtml(req.borrower_name)}</td><td style="padding: 5px;"><strong>Instructor's Name:</strong> ${escHtml(req.instructor_name || '-')}</td></tr>
+            <tr><td style="padding: 5px;"><strong>Student ID:</strong> ${escHtml(req.student_id || '-')}</td><td style="padding: 5px;"><strong>Subject Code:</strong> ${escHtml(req.subject_code || '-')}</td></tr>
+            <tr><td style="padding: 5px;"><strong>Department:</strong> ${escHtml(req.department || '-')}</td><td style="padding: 5px;"><strong>Date(s) of Usage:</strong> ${formatDateToDDMMYYYY(req.usage_date)}</td></tr>
+            <tr><td colspan="2" style="padding: 5px;"><strong>Room:</strong> ${escHtml(req.room || '-')}</td></tr>
+          </table>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #000;">
+            <thead>
+              <tr style="background: #f0f0f0;">
+                <th style="border: 1px solid #000; padding: 8px; text-align: left;">Equipment / Material</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Quantity</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Available in the lab?</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: left;">Returned on</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: left;">Remarks</th>
+              </tr>
+            </thead>
+            <tbody>${eqRows}</tbody>
+          </table>
+          <div style="margin-bottom: 20px;">
+            <strong>Borrower's Declaration of Commitment:</strong><br/>
+            <em>"I will be accountable to any damage incurred in the equipment and will return the equipment promptly and in the same working condition it was borrowed."</em>
+          </div>
+          <table style="width: 100%; margin-top: 40px;">
+            <tr><td colspan="2" style="padding: 20px; text-align: left; vertical-align: top;">${buildHiromiApprovalBlock(false)}</td></tr>
+          </table>
+        </div>
+      `;
+
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = formHtml;
+      html2pdf().set({
+        margin: [10, 10, 10, 10],
+        filename: `borrow-report-${reqId}.pdf`,
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      }).from(wrapper).save();
+    });
+  });
+}
+
+function renderReportsPage() {
+  const container = document.getElementById('reportsList');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!reportsState.data.length) {
+    container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">No accepted or rejected requests yet.</div>';
+    updateReportsPagination();
+    return;
+  }
+
+  if (!reportsState.filteredData.length) {
+    container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">No reports match the current filters.</div>';
+    updateReportsPagination();
+    return;
+  }
+
+  getReportsVisibleEntries().forEach(entry => {
+    container.appendChild(renderReportCard(entry));
+  });
+
+  wireReportCardControls(container);
+  updateReportsPagination();
+}
+
+function loadReports(options = {}) {
+  const container = document.getElementById('reportsList');
+  if (!container) return;
+  const keepPage = options.keepPage !== false;
+  container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">Loading reports...</div>';
+
+  fetch('fetch_borrow_reports.php')
+    .then(r => r.json())
+    .then(json => {
+      if (!json.success) {
+        reportsState.data = [];
+        reportsState.filteredData = [];
+        renderReportsPage();
+        return;
+      }
+
+      reportsState.data = Array.isArray(json.data) ? json.data : [];
+      applyReportsFilters(!keepPage);
+      renderReportsPage();
+    })
+    .catch(err => {
+      console.error('loadReports error:', err);
+      container.innerHTML = '<div style="color:var(--danger);padding:16px 0;">Failed to load reports.</div>';
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
 
   // ── ADD button ──
@@ -2170,7 +2675,6 @@ function navigateToSection(sectionName) {
   if (sectionName === 'Schedule') {
     if (typeof calendar !== 'undefined' && calendar) calendar.render();
     else if (typeof initCalendar === 'function') initCalendar();
-    initScheduleCharts();
   } else if (sectionName === 'Borrow Requests') {
     loadBorrowRequestsAndUpdateCount();
   } else if (sectionName === 'Inventory') {
@@ -2178,6 +2682,13 @@ function navigateToSection(sectionName) {
     refreshHistTabCount();
   } else if (sectionName === 'Reports') {
     loadReports();
+    moveScheduleSummaryToReports();
+    if (document.getElementById('reportsPanelSummary')?.classList.contains('active')) {
+      initScheduleCharts();
+      setTimeout(() => {
+        if (trendChart && typeof trendChart.resize === 'function') trendChart.resize();
+      }, 80);
+    }
   }
   setActiveSidebarItem(sectionName);
 }
@@ -2716,7 +3227,7 @@ function formatDateToDDMMYYYY(dateStr) {
 
 function buildReturnRemarksControl(remarksValue, quantity) {
   const qty = Number(quantity) || 0;
-  const options = ['Good Condition', 'Not Working'];
+  const options = ['Good Condition', 'Not Working','Lost','Disposed'];
   if (qty > 1) options.push('Complete', 'Incomplete');
 
   const saved = String(remarksValue || '').trim();
@@ -2762,6 +3273,9 @@ function addToReports(id, status) {
   .then(r => r.json())
   .then(res => {
     if (!res.success) console.warn('Status update failed:', res.message);
+    if (res.success && document.getElementById('reportsSection')?.style.display !== 'none') {
+      loadReports({ keepPage: true });
+    }
     return res;
   })
   .catch(err => console.error('addToReports error:', err));
@@ -2784,7 +3298,7 @@ function loadBorrowRequestsAndUpdateCount() {
 // ════════════════════════════════════════════════════════════════
 // REPORTS — load accepted / rejected requests with return info editing
 // ════════════════════════════════════════════════════════════════
-function loadReports() {
+function loadReportsLegacy() {
   const container = document.getElementById('reportsList');
   if (!container) return;
   container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">Loading reports…</div>';
