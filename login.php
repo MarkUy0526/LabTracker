@@ -11,10 +11,10 @@ session_destroy();
    ════════════════════════════════════════════════════════════════ */
 $slideImages = [
     'images/anoto.jpg',
-    'images/piece.jpg',
-    'images/ackshwalli.jpg',
-    'images/slide4.jpg',
-    'images/slide5.jpg',
+    'images/Micrometer.jpg',
+    'images/Oscilloscope.jpg',
+    'images/Funtion Generator.jpg',
+    'images/Physics Lab Manual.jpg',
 ];
 ?>
 <!DOCTYPE html>
