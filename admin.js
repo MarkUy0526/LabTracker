@@ -713,7 +713,6 @@ function viewCurrentAuditDetail() {
           <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'previous')}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'actual')}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.status)}</td>
-          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(auditChangeSummary(item))}<br><span style="color:var(--text-3);">${escHtml(item.damage_notes || '')}</span></td>
         </tr>
       `).join('');
 
@@ -740,14 +739,13 @@ function viewCurrentAuditDetail() {
                 <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Previous Report <span title="Total">T</span>/<span title="Working">W</span>/<span title="Not Working">NW</span>/<span title="Maintenance">M</span></th>
                 <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">New Report <span title="Total">T</span>/<span title="Working">W</span>/<span title="Not Working">NW</span>/<span title="Maintenance">M</span></th>
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Status</th>
-                <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Notes</th>
               </tr>
             </thead>
             <tbody>${itemsHtml}</tbody>
           </table>
 
           <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end;">
-            <button class="export-current-audit-btn" data-audit-id="${currentAuditID}" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">Export CSV</button>
+            <button class="export-current-audit-xlsx-btn" data-audit-id="${currentAuditID}" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">↓ Export XLSX</button>
             <button class="close-detail-modal" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;">Close</button>
           </div>
         </div>
@@ -762,10 +760,10 @@ function viewCurrentAuditDetail() {
         });
       });
 
-      modal.querySelectorAll('.export-current-audit-btn').forEach(btn => {
+      modal.querySelectorAll('.export-current-audit-xlsx-btn').forEach(btn => {
         btn.addEventListener('click', function() {
-          const csvAuditId = this.getAttribute('data-audit-id');
-          exportAuditCSV(csvAuditId);
+          const xlsxAuditId = this.getAttribute('data-audit-id');
+          exportAuditExcel(xlsxAuditId);
         });
       });
     })
@@ -854,7 +852,6 @@ function viewAuditDetail(auditId) {
           <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'previous')}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'actual')}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.status)}</td>
-          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(auditChangeSummary(item))}<br><span style="color:var(--text-3);">${escHtml(item.damage_notes || '')}</span></td>
         </tr>
       `;
       }).join('');
@@ -882,7 +879,6 @@ function viewAuditDetail(auditId) {
                 <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Previous Report <span title="Total">T</span>/<span title="Working">W</span>/<span title="Not Working">NW</span>/<span title="Maintenance">M</span></th>
                 <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">New Report <span title="Total">T</span>/<span title="Working">W</span>/<span title="Not Working">NW</span>/<span title="Maintenance">M</span></th>
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Status</th>
-                <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Notes</th>
               </tr>
             </thead>
             <tbody>${itemsHtml}</tbody>
@@ -890,7 +886,6 @@ function viewAuditDetail(auditId) {
 
           <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end;">
             <button class="export-audit-xlsx-btn" data-audit-id="${auditId}" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">↓ Export XLSX</button>
-            <button class="export-audit-csv-btn" data-audit-id="${auditId}" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">Export CSV</button>
             <button class="close-audit-modal" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;">Close</button>
           </div>
         </div>
@@ -912,26 +907,10 @@ function viewAuditDetail(auditId) {
         });
       });
 
-      modal.querySelectorAll('.export-audit-csv-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-          const csvAuditId = this.getAttribute('data-audit-id');
-          exportAuditCSV(csvAuditId);
-        });
-      });
     })
     .catch(err => {
       alert('Error loading audit details: ' + err.message);
     });
-}
-
-function exportAuditCSV(auditId) {
-  if (!auditId) {
-    alert('Invalid audit ID');
-    return;
-  }
-  // Use window.open instead of window.location for better control
-  const url = 'export_audit_csv.php?audit_id=' + encodeURIComponent(auditId);
-  window.open(url, '_blank');
 }
 
 function exportAuditExcel(auditId) {
