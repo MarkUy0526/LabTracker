@@ -228,6 +228,7 @@ function loadAuditChecklistItems() {
     .then(res => {
       if (!res.success || !res.data) throw new Error(res.message);
       currentAuditData.items = res.data;
+      currentAuditData.previousSnapshot = res.previous_snapshot || null;
       renderAuditChecklistTable();
       document.getElementById('auditChecklistSection').style.display = 'block';
       filterAuditItems();
@@ -280,13 +281,13 @@ function allocateAuditQuantities(total, working, notWorking, maintenance) {
 }
 
 function normalizeAuditItemQuantities(item) {
-  item.expected_qty = auditCount(item.expected_qty);
-  item.expected_working_qty = auditCount(item.expected_working_qty);
-  item.expected_not_working_qty = auditCount(item.expected_not_working_qty);
-  item.expected_maintenance_qty = auditCount(item.expected_maintenance_qty);
+  item.previous_qty = auditCount(item.previous_qty ?? item.expected_qty);
+  item.previous_working_qty = auditCount(item.previous_working_qty ?? item.expected_working_qty);
+  item.previous_not_working_qty = auditCount(item.previous_not_working_qty ?? item.expected_not_working_qty);
+  item.previous_maintenance_qty = auditCount(item.previous_maintenance_qty ?? item.expected_maintenance_qty);
 
-  if (item.expected_working_qty + item.expected_not_working_qty + item.expected_maintenance_qty === 0 && item.expected_qty > 0) {
-    item.expected_working_qty = item.expected_qty;
+  if (item.previous_working_qty + item.previous_not_working_qty + item.previous_maintenance_qty === 0 && item.previous_qty > 0) {
+    item.previous_working_qty = item.previous_qty;
   }
 
   const hasActualBreakdown = ['actual_working_qty', 'actual_not_working_qty', 'actual_maintenance_qty']
@@ -300,9 +301,9 @@ function normalizeAuditItemQuantities(item) {
   if (!hasActualBreakdown && item.actual_qty > 0) {
     const allocated = allocateAuditQuantities(
       item.actual_qty,
-      item.expected_working_qty,
-      item.expected_not_working_qty,
-      item.expected_maintenance_qty
+      item.previous_working_qty,
+      item.previous_not_working_qty,
+      item.previous_maintenance_qty
     );
     item.actual_working_qty = allocated.working;
     item.actual_not_working_qty = allocated.notWorking;
@@ -320,13 +321,73 @@ function formatAuditQtyGroup(item, prefix) {
   return `${total} / ${working} / ${notWorking} / ${maintenance}`;
 }
 
+function auditQtyComparisonHtml(item, prefix) {
+  normalizeAuditItemQuantities(item);
+  const fields = [
+    ['T', 'Total', `${prefix}_qty`, 'previous_qty'],
+    ['W', 'Working', `${prefix}_working_qty`, 'previous_working_qty'],
+    ['NW', 'Non-working', `${prefix}_not_working_qty`, 'previous_not_working_qty'],
+    ['M', 'Maintenance', `${prefix}_maintenance_qty`, 'previous_maintenance_qty'],
+  ];
+
+  return `
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(34px,1fr));gap:4px;font-family:var(--mono);">
+      ${fields.map(([label, title, valueKey, previousKey]) => {
+        const value = auditCount(item[valueKey]);
+        const changed = prefix === 'actual' && value !== auditCount(item[previousKey]);
+        return `
+          <span title="${title}" style="display:inline-flex;align-items:center;justify-content:center;gap:3px;padding:4px 5px;border-radius:6px;border:1px solid ${changed ? 'rgba(200,80,42,.45)' : 'var(--border)'};background:${changed ? 'rgba(200,80,42,.10)' : 'var(--surface)'};color:${changed ? 'var(--accent)' : 'var(--text-2)'};">
+            <strong style="font-family:var(--font);font-size:10px;">${label}</strong>${value}
+          </span>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function auditChangeSummary(item) {
+  normalizeAuditItemQuantities(item);
+  const changes = [];
+  const previousStatus = item.previous_status || 'Complete';
+  const previousNotes = (item.previous_notes || '').trim();
+  const currentNotes = (item.damage_notes || '').trim();
+
+  [
+    ['T', item.previous_qty, item.actual_qty],
+    ['W', item.previous_working_qty, item.actual_working_qty],
+    ['NW', item.previous_not_working_qty, item.actual_not_working_qty],
+    ['M', item.previous_maintenance_qty, item.actual_maintenance_qty],
+  ].forEach(([label, previousValue, currentValue]) => {
+    if (auditCount(previousValue) !== auditCount(currentValue)) {
+      changes.push(`${label}: ${auditCount(previousValue)} -> ${auditCount(currentValue)}`);
+    }
+  });
+
+  if (previousStatus !== (item.status || 'Complete')) {
+    changes.push(`Status: ${previousStatus} -> ${item.status || 'Complete'}`);
+  }
+  if (previousNotes !== currentNotes) {
+    changes.push('Notes changed');
+  }
+  if (!item.previous_found) {
+    changes.push('No previous snapshot record');
+  }
+
+  return changes.length ? changes.join('; ') : 'No change from previous report';
+}
+
+function refreshAuditChangeSummary(row, item) {
+  const summary = row?.querySelector('.audit-change-summary');
+  if (summary) summary.textContent = auditChangeSummary(item);
+}
+
 function updateAuditRowStatus(item, row) {
   const statusSelect = row.querySelector('.audit-status-select');
   if (statusSelect && statusSelect.value !== 'Damaged') {
-    if (item.actual_qty === item.expected_qty) {
+    if (item.actual_qty === item.previous_qty) {
       item.status = 'Complete';
       statusSelect.value = 'Complete';
-    } else if (item.actual_qty < item.expected_qty) {
+    } else if (item.actual_qty < item.previous_qty) {
       item.status = 'Missing';
       statusSelect.value = 'Missing';
     } else {
@@ -343,10 +404,11 @@ function renderAuditChecklistTable() {
   tbody.innerHTML = currentAuditData.items.map((item, idx) => {
     normalizeAuditItemQuantities(item);
     const status = determineAuditStatus(item);
+    item.status = status;
     return `
       <tr data-equipment-id="${escHtml(item.equipment_id)}" data-index="${idx}" style="border-bottom:1px solid var(--border);">
         <td style="padding:10px 12px;text-align:left;">${escHtml(item.equipment_name)}</td>
-        <td style="padding:10px 12px;text-align:center;color:var(--text-2);font-family:var(--mono);font-size:12px;">${formatAuditQtyGroup(item, 'expected')}</td>
+        <td style="padding:10px 12px;text-align:center;color:var(--text-2);font-family:var(--mono);font-size:12px;">${formatAuditQtyGroup(item, 'previous')}</td>
         <td style="padding:10px 12px;text-align:center;">
           <div style="display:grid;grid-template-columns:repeat(4,54px);gap:5px;justify-content:center;">
             <input type="number" min="0" value="${item.actual_qty}" class="audit-total-input"
@@ -373,6 +435,7 @@ function renderAuditChecklistTable() {
         </td>
         <td style="padding:10px 12px;text-align:left;">
           <textarea placeholder="Notes..." class="audit-damage-notes" data-index="${idx}" style="font-family:var(--font);font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text-1);width:100%;min-height:28px;resize:vertical;outline:none;">${escHtml(item.damage_notes || '')}</textarea>
+          <div class="audit-change-summary" style="margin-top:4px;font-size:10px;color:var(--text-3);line-height:1.35;">${escHtml(auditChangeSummary(item))}</div>
         </td>
       </tr>
     `;
@@ -389,9 +452,9 @@ function renderAuditChecklistTable() {
           const nextTotal = auditCount(this.value);
           const allocated = allocateAuditQuantities(
             nextTotal,
-            item.actual_working_qty || item.expected_working_qty,
-            item.actual_not_working_qty || item.expected_not_working_qty,
-            item.actual_maintenance_qty || item.expected_maintenance_qty
+            item.actual_working_qty || item.previous_working_qty,
+            item.actual_not_working_qty || item.previous_not_working_qty,
+            item.actual_maintenance_qty || item.previous_maintenance_qty
           );
           item.actual_working_qty = allocated.working;
           item.actual_not_working_qty = allocated.notWorking;
@@ -401,6 +464,7 @@ function renderAuditChecklistTable() {
           row.querySelector('[data-field="actual_not_working_qty"]').value = allocated.notWorking;
           row.querySelector('[data-field="actual_maintenance_qty"]').value = allocated.maintenance;
           updateAuditRowStatus(item, row);
+          refreshAuditChangeSummary(row, item);
           filterAuditItems();
         }
       }
@@ -419,6 +483,7 @@ function renderAuditChecklistTable() {
           item.actual_qty = auditConditionTotal(item);
           row.querySelector('.audit-total-input').value = item.actual_qty;
           updateAuditRowStatus(item, row);
+          refreshAuditChangeSummary(row, item);
           filterAuditItems();
         }
       }
@@ -432,6 +497,7 @@ function renderAuditChecklistTable() {
         const item = currentAuditData.items[idx];
         if (item) {
           item.status = this.value;
+          refreshAuditChangeSummary(this.closest('tr'), item);
           filterAuditItems();
         }
       }
@@ -445,6 +511,7 @@ function renderAuditChecklistTable() {
         const item = currentAuditData.items[idx];
         if (item) {
           item.damage_notes = this.value;
+          refreshAuditChangeSummary(this.closest('tr'), item);
         }
       }
     });
@@ -454,8 +521,8 @@ function renderAuditChecklistTable() {
 function determineAuditStatus(item) {
   if (item.status === 'Damaged') return 'Damaged';
   normalizeAuditItemQuantities(item);
-  if (item.actual_qty === item.expected_qty) return 'Complete';
-  if (item.actual_qty < item.expected_qty) return 'Missing';
+  if (item.actual_qty === item.previous_qty) return 'Complete';
+  if (item.actual_qty < item.previous_qty) return 'Missing';
   return 'Complete';
 }
 
@@ -507,10 +574,10 @@ function saveDraftAudit() {
   const items = currentAuditData.items.map(item => ({
     equipment_id: item.equipment_id,
     equipment_name: item.equipment_name,
-    expected_qty: item.expected_qty,
-    expected_working_qty: item.expected_working_qty || 0,
-    expected_not_working_qty: item.expected_not_working_qty || 0,
-    expected_maintenance_qty: item.expected_maintenance_qty || 0,
+    previous_qty: item.previous_qty,
+    previous_working_qty: item.previous_working_qty || 0,
+    previous_not_working_qty: item.previous_not_working_qty || 0,
+    previous_maintenance_qty: item.previous_maintenance_qty || 0,
     actual_qty: item.actual_qty || 0,
     actual_working_qty: item.actual_working_qty || 0,
     actual_not_working_qty: item.actual_not_working_qty || 0,
@@ -553,10 +620,10 @@ function submitAudit() {
   const items = currentAuditData.items.map(item => ({
     equipment_id: item.equipment_id,
     equipment_name: item.equipment_name,
-    expected_qty: item.expected_qty,
-    expected_working_qty: item.expected_working_qty || 0,
-    expected_not_working_qty: item.expected_not_working_qty || 0,
-    expected_maintenance_qty: item.expected_maintenance_qty || 0,
+    previous_qty: item.previous_qty,
+    previous_working_qty: item.previous_working_qty || 0,
+    previous_not_working_qty: item.previous_not_working_qty || 0,
+    previous_maintenance_qty: item.previous_maintenance_qty || 0,
     actual_qty: item.actual_qty || 0,
     actual_working_qty: item.actual_working_qty || 0,
     actual_not_working_qty: item.actual_not_working_qty || 0,
@@ -627,10 +694,10 @@ function viewCurrentAuditDetail() {
       const itemsHtml = res.items.map(item => `
         <tr>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.equipment_name)}</td>
-          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;font-family:var(--mono);">${formatAuditQtyGroup(item, 'expected')}</td>
-          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;font-family:var(--mono);">${formatAuditQtyGroup(item, 'actual')}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'previous')}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'actual')}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.status)}</td>
-          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.damage_notes || '')}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(auditChangeSummary(item))}<br><span style="color:var(--text-3);">${escHtml(item.damage_notes || '')}</span></td>
         </tr>
       `).join('');
 
@@ -642,6 +709,8 @@ function viewCurrentAuditDetail() {
           </div>
 
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px;">
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Audit ID</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${res.audit.id}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Snapshot</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${res.snapshot ? `#${res.snapshot.id} · ${escHtml(res.snapshot.snapshot_at)}` : 'Legacy'}</div></div>
             <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Date</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${formatAuditDate(res.audit.audit_date)}</div></div>
             <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Admin</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${escHtml(res.audit.admin_name)}</div></div>
             <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Complete</span><div style="font-size:14px;font-weight:600;color:var(--accent);">${res.audit.complete_count}</div></div>
@@ -652,8 +721,8 @@ function viewCurrentAuditDetail() {
             <thead>
               <tr style="background:var(--surface-2);">
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Equipment</th>
-                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Expected T/W/NW/M</th>
-                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Actual T/W/NW/M</th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Previous Report <span title="Total">T</span>/<span title="Working">W</span>/<span title="Not Working">NW</span>/<span title="Maintenance">M</span></th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">New Report <span title="Total">T</span>/<span title="Working">W</span>/<span title="Not Working">NW</span>/<span title="Maintenance">M</span></th>
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Status</th>
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Notes</th>
               </tr>
@@ -662,7 +731,7 @@ function viewCurrentAuditDetail() {
           </table>
 
           <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end;">
-            <button class="export-current-audit-btn" data-audit-id="${currentAuditID}" style="background:var(--accent);color:#fff;border:1px solid var(--accent);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">Export as CSV</button>
+            <button class="export-current-audit-btn" data-audit-id="${currentAuditID}" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">Export CSV</button>
             <button class="close-detail-modal" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;">Close</button>
           </div>
         </div>
@@ -763,10 +832,10 @@ function viewAuditDetail(auditId) {
       const itemsHtml = res.items.map(item => `
         <tr>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.equipment_name)}</td>
-          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;font-family:var(--mono);">${formatAuditQtyGroup(item, 'expected')}</td>
-          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;font-family:var(--mono);">${formatAuditQtyGroup(item, 'actual')}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'previous')}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'actual')}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.status)}</td>
-          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.damage_notes || '')}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(auditChangeSummary(item))}<br><span style="color:var(--text-3);">${escHtml(item.damage_notes || '')}</span></td>
         </tr>
       `).join('');
 
@@ -778,6 +847,8 @@ function viewAuditDetail(auditId) {
           </div>
 
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px;">
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Audit ID</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${res.audit.id}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Snapshot</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${res.snapshot ? `#${res.snapshot.id} · ${escHtml(res.snapshot.snapshot_at)}` : 'Legacy'}</div></div>
             <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Date</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${formatAuditDate(res.audit.audit_date)}</div></div>
             <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Admin</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${escHtml(res.audit.admin_name)}</div></div>
             <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Complete</span><div style="font-size:14px;font-weight:600;color:var(--accent);">${res.audit.complete_count}</div></div>
@@ -788,8 +859,8 @@ function viewAuditDetail(auditId) {
             <thead>
               <tr style="background:var(--surface-2);">
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Equipment</th>
-                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Expected T/W/NW/M</th>
-                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Actual T/W/NW/M</th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Previous Report <span title="Total">T</span>/<span title="Working">W</span>/<span title="Not Working">NW</span>/<span title="Maintenance">M</span></th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">New Report <span title="Total">T</span>/<span title="Working">W</span>/<span title="Not Working">NW</span>/<span title="Maintenance">M</span></th>
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Status</th>
                 <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Notes</th>
               </tr>
@@ -798,7 +869,7 @@ function viewAuditDetail(auditId) {
           </table>
 
           <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end;">
-            <button class="export-audit-csv-btn" data-audit-id="${auditId}" style="background:var(--accent);color:#fff;border:1px solid var(--accent);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">Export as CSV</button>
+            <button class="export-audit-csv-btn" data-audit-id="${auditId}" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">Export CSV</button>
             <button class="close-audit-modal" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;">Close</button>
           </div>
         </div>
@@ -1113,6 +1184,65 @@ function escHtml(str) {
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function isEquipmentBorrowable(item) {
+  return parseInt(item?.is_borrowable ?? 1, 10) === 1;
+}
+
+function renderBorrowingStatusBadge(item) {
+  const borrowable = isEquipmentBorrowable(item);
+  const label = borrowable ? 'Available for Borrowing' : 'Restricted / Hidden';
+  const color = borrowable ? 'var(--accent)' : 'var(--warn)';
+  const bg = borrowable ? 'var(--accent-soft)' : 'var(--warn-soft)';
+  const border = borrowable ? '#a8d5b5' : '#f5c98a';
+  return `<span class="borrow-status-badge" style="display:inline-flex;align-items:center;justify-content:center;padding:3px 8px;border-radius:999px;border:1px solid ${border};background:${bg};color:${color};font-size:10.5px;font-weight:700;line-height:1.2;white-space:nowrap;">${label}</span>`;
+}
+
+function formatInventoryTimestamp(value) {
+  if (!value) return 'Never';
+  const normalized = String(value).replace(' ', 'T');
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+}
+
+function updateInventoryMetadataDisplay(metadata = {}) {
+  const importedEl = document.getElementById('inventoryLastImported');
+  const editedEl = document.getElementById('inventoryLastEdited');
+  if (importedEl) importedEl.textContent = formatInventoryTimestamp(metadata.last_imported_at);
+  if (editedEl) editedEl.textContent = formatInventoryTimestamp(metadata.last_edited_at);
+}
+
+function loadInventoryMetadata(items = null) {
+  fetch('get_inventory_metadata.php')
+    .then(r => r.json())
+    .then(res => {
+      if (res.success && res.metadata) {
+        updateInventoryMetadataDisplay(res.metadata);
+        return;
+      }
+      throw new Error(res.message || 'Unable to load inventory metadata.');
+    })
+    .catch(() => {
+      const sourceItems = Array.isArray(items) ? items : [];
+      const latest = (field) => sourceItems
+        .map(item => item[field])
+        .filter(Boolean)
+        .sort()
+        .pop() || null;
+
+      updateInventoryMetadataDisplay({
+        last_imported_at: latest('last_imported_at'),
+        last_edited_at: latest('last_edited_at')
+      });
+    });
+}
+
 const INVENTORY_CONDITION_FIELDS = {
   total:       { itemKey: 'total_qty',       label: 'Total',       className: 'condition-t' },
   working:     { itemKey: 'working_qty',     label: 'Working',     className: 'condition-w' },
@@ -1169,6 +1299,7 @@ function updateEquipmentCondition(input) {
     .then(res => {
       if (!res.success) throw new Error(res.message || 'Unable to update condition quantity.');
       input.dataset.previousValue = String(nextValue);
+      loadInventoryMetadata();
 
       if (selectedItemData && selectedItemData.equipment_id === equipmentID) {
         selectedItemData[field.itemKey] = nextValue;
@@ -1293,6 +1424,23 @@ function makeInlineInput(fieldName, type, value, disabled) {
   `;
   if (isTextarea) el.rows = 2;
   if (type === 'number') el.min = 0;
+  return el;
+}
+
+function makeInlineSelect(fieldName, value) {
+  const el = document.createElement('select');
+  el.dataset.field = fieldName;
+  el.innerHTML = `
+    <option value="1">Available for Borrowing</option>
+    <option value="0">Restricted / Hidden from Guest Side</option>`;
+  el.value = String(parseInt(value ?? 1, 10) === 1 ? 1 : 0);
+  el.style.cssText = `
+    width:100%;box-sizing:border-box;
+    font-family:var(--font);font-size:12px;padding:4px 7px;
+    border:1.5px solid var(--accent);
+    border-radius:6px;background:var(--surface);color:var(--text-1);
+    outline:none;
+  `;
   return el;
 }
 
@@ -1451,7 +1599,8 @@ function getInlineInventoryValues() {
   return {
     equipmentID: currentEditItem?.equipment_id || '',
     equipmentName: val('equipmentName'),
-    accountablePerson: val('accountablePerson')
+    accountablePerson: val('accountablePerson'),
+    isBorrowable: val('isBorrowable') || '1'
   };
 }
 
@@ -1469,6 +1618,7 @@ function getAddInventoryValues() {
     equipmentID: get('equipmentID'),
     equipmentName: get('equipmentName'),
     accountablePerson: get('accountablePerson'),
+    isBorrowable: document.getElementById('borrowingStatus')?.value || '1',
     totalQty: get('totalQty'),
     workingQty: get('workingQty'),
     notWorkingQty: get('notWorkingQty'),
@@ -1566,8 +1716,8 @@ function enterInlineEdit(row, item) {
     [3, 'serialNumber',      'text',     item.serial_number,   false],
     [4, 'internalSN',        'text',     item.internal_sn,     false],
     [5, 'accountablePerson', 'text',     item.account_person,  false],
-    [10, 'description',      'textarea', item.description,     false],
-    // cell 11 is the history button - leave intact
+    [11, 'description',      'textarea', item.description,     false],
+    // cell 12 is the history button.
   ];
 
   fields.forEach(([cellIdx, fieldName, type, value, dis]) => {
@@ -1579,10 +1729,18 @@ function enterInlineEdit(row, item) {
     cell.appendChild(makeInlineInput(fieldName, type, value, dis));
   });
 
+  const visibilityCell = row.cells[6];
+  if (visibilityCell) {
+    visibilityCell.innerHTML = '';
+    visibilityCell.style.verticalAlign = 'top';
+    visibilityCell.style.padding = '6px 8px';
+    visibilityCell.appendChild(makeInlineSelect('isBorrowable', item.is_borrowable));
+  }
+
   row.style.background = 'var(--accent-soft)';
   removeStickyBar();
   document.body.appendChild(createStickyActionBar(item));
-  row.querySelectorAll('input[data-field], textarea[data-field]').forEach(el => {
+  row.querySelectorAll('input[data-field], textarea[data-field], select[data-field]').forEach(el => {
     el.addEventListener('input', updateInlineEditSaveState);
     el.addEventListener('change', updateInlineEditSaveState);
   });
@@ -1622,6 +1780,7 @@ function saveInlineEdit() {
   const notWorkingQty     = String(currentEditItem.not_working_qty ?? 0);
   const maintenanceQty    = String(currentEditItem.maintenance_qty ?? 0);
   const description       = val('description');
+  const isBorrowable      = val('isBorrowable') || '1';
 
   const validation = validateEquipmentDetails({
     equipmentName,
@@ -1647,6 +1806,7 @@ function saveInlineEdit() {
   formData.append('maintenanceQty', maintenanceQty);
   formData.append('description', description);
   formData.append('accountablePerson', accountablePerson);
+  formData.append('isBorrowable', isBorrowable);
 
   // Add image file if selected
   const imageInput = document.getElementById('equipmentImageInput');
@@ -2212,6 +2372,8 @@ document.addEventListener('DOMContentLoaded', () => {
       .forEach(id => { document.getElementById(id).value = ''; });
     const maintenanceInput = document.getElementById('maintenanceQty');
     if (maintenanceInput) maintenanceInput.value = '0';
+    const borrowingStatus = document.getElementById('borrowingStatus');
+    if (borrowingStatus) borrowingStatus.value = '1';
     ['equipmentID','totalQty','workingQty','notWorkingQty','maintenanceQty']
       .forEach(id => { document.getElementById(id).disabled = false; });
     openAddEquipmentModal();
@@ -2236,7 +2398,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // FIX 2: SUBMIT ADD MODAL — after success, call saveEquipmentLog + loadInventory
-  ['equipmentID','equipmentName','accountablePerson','totalQty','workingQty','notWorkingQty','maintenanceQty']
+  ['equipmentID','equipmentName','accountablePerson','borrowingStatus','totalQty','workingQty','notWorkingQty','maintenanceQty']
     .forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -2257,6 +2419,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const maintenanceQty    = document.getElementById('maintenanceQty').value.trim();
     const description       = document.getElementById('description').value.trim();
     const accountablePerson = document.getElementById('accountablePerson').value.trim();
+    const isBorrowable      = document.getElementById('borrowingStatus')?.value || '1';
 
     const validation = validateInventoryValues({
       equipmentID,
@@ -2276,7 +2439,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $.ajax({
       url: 'add_equipment.php', method: 'POST',
       data: { equipmentID, equipmentName, serialNumber, internalSN,
-              totalQty, workingQty, notWorkingQty, maintenanceQty, description, accountablePerson },
+              totalQty, workingQty, notWorkingQty, maintenanceQty, description, accountablePerson, isBorrowable },
       // FIX: removed dataType:'json' to avoid false error triggers
       success: function(rawData) {
         let data;
@@ -2301,6 +2464,8 @@ document.addEventListener('DOMContentLoaded', () => {
           ['equipmentID','equipmentName','serialNumber','internalSN','totalQty',
            'workingQty','notWorkingQty','maintenanceQty','description','accountablePerson']
             .forEach(id => { document.getElementById(id).value = ''; });
+          const borrowingStatus = document.getElementById('borrowingStatus');
+          if (borrowingStatus) borrowingStatus.value = '1';
 
           // FIX 3: reload inventory immediately so new equipment shows without page refresh
           loadInventory();
@@ -2361,6 +2526,45 @@ document.addEventListener('DOMContentLoaded', () => {
     _pendingImportFile = file;
     this.value = '';
 
+    openImportWarning(file);
+  });
+
+  function openImportWarning(file) {
+    let modal = document.getElementById('importWarningModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'importWarningModal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:1250;background:rgba(26,26,24,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;';
+      modal.innerHTML = `
+        <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow-md);width:min(460px,100%);padding:22px 24px;">
+          <div style="font-size:16px;font-weight:700;color:var(--text-1);margin-bottom:8px;">Confirm Inventory Import</div>
+          <div id="importWarningFile" style="font-size:12px;color:var(--text-3);margin-bottom:14px;"></div>
+          <div style="border:1px solid #f5c98a;background:var(--warn-soft);color:var(--text-1);border-radius:var(--radius);padding:12px 14px;font-size:13px;line-height:1.45;margin-bottom:18px;">
+            Importing this file will overwrite matching equipment records in the current Inventory List and add any new records from the file. Review the preview carefully before confirming the final import.
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:10px;">
+            <button id="cancelImportWarningBtn" style="background:var(--surface-2);color:var(--text-2);border:1px solid var(--border);padding:9px 18px;border-radius:var(--radius);font-family:var(--font);font-size:13px;cursor:pointer;">Cancel</button>
+            <button id="continueImportWarningBtn" style="background:var(--accent);color:#fff;border:1px solid var(--accent);padding:9px 18px;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;">Continue Import</button>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+      document.getElementById('cancelImportWarningBtn').addEventListener('click', () => {
+        modal.style.display = 'none';
+        _pendingImportFile = null;
+      });
+      document.getElementById('continueImportWarningBtn').addEventListener('click', () => {
+        modal.style.display = 'none';
+        startImportPreview(_pendingImportFile);
+      });
+    }
+
+    document.getElementById('importWarningFile').textContent = `Selected file: ${file.name}`;
+    modal.style.display = 'flex';
+  }
+
+  function startImportPreview(file) {
+    if (!file) return;
+
     const formData = new FormData();
     formData.append('excelFile', file);
     formData.append('preview', '1');
@@ -2393,7 +2597,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('Import preview error:', err);
         alert('Failed to read file:\n' + (err.message || err));
       });
-  });
+  }
 
   function openImportPreview(res, file) {
     const modal = document.getElementById('importPreviewModal');
@@ -2401,6 +2605,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const meta  = document.getElementById('importPreviewMeta');
 
     meta.textContent = `File: ${file.name} · ${res.rows.length} row(s) · ${res.new_count} new · ${res.dup_count} duplicate(s)`;
+
+    const restrictedCount = res.rows.filter(row => parseInt(row.is_borrowable ?? 1, 10) !== 1).length;
+    meta.textContent = `File: ${file.name} · ${res.rows.length} row(s) · ${res.new_count} new · ${res.dup_count} duplicate(s) · ${restrictedCount} restricted`;
 
     tbody.innerHTML = '';
     res.rows.forEach(row => {
@@ -2417,6 +2624,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);color:var(--text-3);">${escHtml(row.serial_number || '—')}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);color:var(--text-3);">${escHtml(row.internal_sn || '—')}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);">${escHtml(row.account_person || '—')}</td>
+        <td style="padding:7px 12px;border-bottom:1px solid var(--border);">${renderBorrowingStatusBadge(row)}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:center;">${row.total_qty}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:center;color:var(--accent);">${row.working_qty}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:center;color:var(--danger);">${row.not_working_qty}</td>
@@ -2493,18 +2701,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const kw  = searchInput.value.toLowerCase();
     const map = { equipment:'e', measuring:'m', chemicals:'c', books:'b' };
     document.getElementById('equipmentList').querySelectorAll('tr').forEach(row => {
-      if (!row.cells || row.cells.length < 12) return;
+      if (!row.cells || row.cells.length < 13) return;
       const id   = row.cells[0].textContent.trim();
-      const total = parseInt(row.cells[6]?.querySelector('input')?.value ?? row.cells[6]?.textContent, 10) || 0;
-      const w = parseInt(row.cells[7]?.querySelector('input')?.value ?? row.cells[7]?.textContent, 10) || 0;
-      const nw = parseInt(row.cells[8]?.querySelector('input')?.value ?? row.cells[8]?.textContent, 10) || 0;
-      const m = parseInt(row.cells[9]?.querySelector('input')?.value ?? row.cells[9]?.textContent, 10) || 0;
+      const total = parseInt(row.cells[7]?.querySelector('input')?.value ?? row.cells[7]?.textContent, 10) || 0;
+      const w = parseInt(row.cells[8]?.querySelector('input')?.value ?? row.cells[8]?.textContent, 10) || 0;
+      const nw = parseInt(row.cells[9]?.querySelector('input')?.value ?? row.cells[9]?.textContent, 10) || 0;
+      const m = parseInt(row.cells[10]?.querySelector('input')?.value ?? row.cells[10]?.textContent, 10) || 0;
+      const borrowable = row.dataset.borrowable === '1';
       const text = getInventoryRowSearchText(row);
       let show   = true;
       if (fv === 'totalqty')        show = total > 0;
       else if (fv === 'working')    show = w > 0;
       else if (fv === 'notworking') show = nw > 0;
       else if (fv === 'maintenance') show = m > 0;
+      else if (fv === 'borrowable') show = borrowable;
+      else if (fv === 'restricted') show = !borrowable;
       else if (fv !== 'all')        show = id.charAt(0).toLowerCase() === map[fv];
       row.style.display = (show && text.includes(kw)) ? '' : 'none';
     });
@@ -2537,12 +2748,14 @@ function loadInventory() {
     success: function(data) {
       const items = typeof data === 'string' ? JSON.parse(data) : data;
       currentEquipmentIDs.clear();
+      loadInventoryMetadata(items);
 
       items.forEach(item => {
         currentEquipmentIDs.add(item.equipment_id);
 
         const row = document.createElement('tr');
         row.style.cursor = 'pointer';
+        row.dataset.borrowable = isEquipmentBorrowable(item) ? '1' : '0';
         row.title = 'Click to select, then click Edit — or double-click to edit directly';
         row.innerHTML = `
           <td>${item.equipment_id}</td>
@@ -2556,6 +2769,7 @@ function loadInventory() {
           <td>${item.serial_number  ?? ''}</td>
           <td>${item.internal_sn   ?? ''}</td>
           <td>${item.account_person ?? ''}</td>
+          <td>${renderBorrowingStatusBadge(item)}</td>
           <td>${renderConditionQtyInput(item, 'total')}</td>
           <td>${renderConditionQtyInput(item, 'working')}</td>
           <td>${renderConditionQtyInput(item, 'notWorking')}</td>
@@ -2601,24 +2815,27 @@ function loadInventory() {
       const kw  = document.getElementById('searchInput')?.value.toLowerCase() || '';
       const map = { equipment:'e', measuring:'m', chemicals:'c', books:'b' };
       container.querySelectorAll('tr').forEach(r => {
-        if (!r.cells || r.cells.length < 12) return;
+        if (!r.cells || r.cells.length < 13) return;
         const id   = r.cells[0].textContent.trim();
-        const total = parseInt(r.cells[6]?.querySelector('input')?.value ?? r.cells[6]?.textContent, 10) || 0;
-        const w = parseInt(r.cells[7]?.querySelector('input')?.value ?? r.cells[7]?.textContent, 10) || 0;
-        const nw = parseInt(r.cells[8]?.querySelector('input')?.value ?? r.cells[8]?.textContent, 10) || 0;
-        const m = parseInt(r.cells[9]?.querySelector('input')?.value ?? r.cells[9]?.textContent, 10) || 0;
+        const total = parseInt(r.cells[7]?.querySelector('input')?.value ?? r.cells[7]?.textContent, 10) || 0;
+        const w = parseInt(r.cells[8]?.querySelector('input')?.value ?? r.cells[8]?.textContent, 10) || 0;
+        const nw = parseInt(r.cells[9]?.querySelector('input')?.value ?? r.cells[9]?.textContent, 10) || 0;
+        const m = parseInt(r.cells[10]?.querySelector('input')?.value ?? r.cells[10]?.textContent, 10) || 0;
+        const borrowable = r.dataset.borrowable === '1';
         const text = getInventoryRowSearchText(r);
         let show   = true;
         if (fv === 'totalqty')        show = total > 0;
         else if (fv === 'working')    show = w > 0;
         else if (fv === 'notworking') show = nw > 0;
         else if (fv === 'maintenance') show = m > 0;
+        else if (fv === 'borrowable') show = borrowable;
+        else if (fv === 'restricted') show = !borrowable;
         else if (fv !== 'all')        show = id.charAt(0).toLowerCase() === map[fv];
         r.style.display = (show && text.includes(kw)) ? '' : 'none';
       });
     },
     error: function() {
-      container.innerHTML = '<tr><td colspan="12">Error loading inventory</td></tr>';
+      container.innerHTML = '<tr><td colspan="13">Error loading inventory</td></tr>';
     }
   });
 }

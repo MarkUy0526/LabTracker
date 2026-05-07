@@ -1,8 +1,10 @@
 <?php
+session_start();
 require 'db.php';
 require 'equipment_condition_helpers.php';
 
 ensureEquipmentMaintenanceColumn($conn);
+ensureEquipmentInventoryControlColumns($conn);
 
 $sql = "SELECT 
     equipment_id, 
@@ -15,8 +17,16 @@ $sql = "SELECT
     not_working_qty, 
     maintenance_qty,
     available,
+    is_borrowable,
+    last_imported_at,
+    last_edited_at,
     description 
     FROM equipment";
+
+$isAdmin = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
+if (!$isAdmin) {
+    $sql .= " WHERE is_borrowable = 1";
+}
 
 $result = $conn->query($sql);
 

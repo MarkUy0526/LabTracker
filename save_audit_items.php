@@ -30,11 +30,11 @@ try {
   foreach ($items as $item) {
     $equipment_id = $item['equipment_id'];
     $equipment_name = $item['equipment_name'];
-    $expected_qty = (int)$item['expected_qty'];
+    $expected_qty = (int)($item['previous_qty'] ?? $item['expected_qty'] ?? $item['actual_qty'] ?? 0);
     $actual_qty = (int)$item['actual_qty'];
-    $expected_working_qty = max(0, (int)($item['expected_working_qty'] ?? 0));
-    $expected_not_working_qty = max(0, (int)($item['expected_not_working_qty'] ?? 0));
-    $expected_maintenance_qty = max(0, (int)($item['expected_maintenance_qty'] ?? 0));
+    $expected_working_qty = max(0, (int)($item['previous_working_qty'] ?? $item['expected_working_qty'] ?? 0));
+    $expected_not_working_qty = max(0, (int)($item['previous_not_working_qty'] ?? $item['expected_not_working_qty'] ?? 0));
+    $expected_maintenance_qty = max(0, (int)($item['previous_maintenance_qty'] ?? $item['expected_maintenance_qty'] ?? 0));
     $actual_working_qty = max(0, (int)($item['actual_working_qty'] ?? 0));
     $actual_not_working_qty = max(0, (int)($item['actual_not_working_qty'] ?? 0));
     $actual_maintenance_qty = max(0, (int)($item['actual_maintenance_qty'] ?? 0));

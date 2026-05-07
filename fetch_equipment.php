@@ -1,8 +1,16 @@
 <?php
 
+session_start();
 include 'db.php';
+require 'equipment_condition_helpers.php';
 
-$query = "SELECT equipment_id, equipment_name, account_person, total_qty, working_qty, not_working_qty, available FROM equipment";
+ensureEquipmentInventoryControlColumns($conn);
+
+$isAdmin = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
+$query = "SELECT equipment_id, equipment_name, account_person, total_qty, working_qty, not_working_qty, available, is_borrowable FROM equipment";
+if (!$isAdmin) {
+    $query .= " WHERE is_borrowable = 1";
+}
 $result = mysqli_query($conn, $query);
 
 $equipment = [];

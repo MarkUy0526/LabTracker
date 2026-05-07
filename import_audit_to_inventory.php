@@ -1,6 +1,7 @@
 <?php
 header('Content-Type: application/json');
 session_start();
+date_default_timezone_set('Asia/Manila');
 
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
   http_response_code(401);
@@ -13,6 +14,8 @@ require 'equipment_condition_helpers.php';
 
 try {
   ensureEquipmentMaintenanceColumn($conn);
+  ensureEquipmentInventoryControlColumns($conn);
+  ensureInventoryMetadataTable($conn);
   ensureAuditItemConditionColumns($conn);
 
   $data = json_decode(file_get_contents('php://input'), true);
@@ -40,6 +43,7 @@ try {
   $items_result = $items_stmt->get_result();
 
   $updated_count = 0;
+  $edited_at = date('Y-m-d H:i:s');
   $conn->begin_transaction();
 
   while ($item = $items_result->fetch_assoc()) {
@@ -91,10 +95,10 @@ try {
       // Update equipment with new quantities
       $update_stmt = $conn->prepare("
         UPDATE equipment
-        SET total_qty = ?, working_qty = ?, not_working_qty = ?, maintenance_qty = ?, available = ?
+        SET total_qty = ?, working_qty = ?, not_working_qty = ?, maintenance_qty = ?, available = ?, last_edited_at = ?
         WHERE equipment_id = ?
       ");
-      $update_stmt->bind_param("iiiiis", $actual_qty, $new_working, $new_not_working, $new_maintenance, $new_available, $equipment_id);
+      $update_stmt->bind_param("iiiiiss", $actual_qty, $new_working, $new_not_working, $new_maintenance, $new_available, $edited_at, $equipment_id);
 
       if ($update_stmt->execute()) {
         $updated_count++;
@@ -103,6 +107,9 @@ try {
   }
 
   $conn->commit();
+  if ($updated_count > 0) {
+    setInventoryMetadata($conn, 'last_edited_at', $edited_at);
+  }
 
   echo json_encode([
     'success' => true,

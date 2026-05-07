@@ -6,7 +6,9 @@ header("Content-Type: application/json");
 include 'db.php';
 require 'equipment_condition_helpers.php';
 
+date_default_timezone_set('Asia/Manila');
 ensureEquipmentMaintenanceColumn($conn);
+ensureEquipmentInventoryControlColumns($conn);
 
 if (!isset($_FILES['excelFile']) || $_FILES['excelFile']['error'] !== UPLOAD_ERR_OK) {
     echo json_encode(["success" => false, "message" => "Upload error."]);
@@ -18,28 +20,104 @@ $preview = isset($_POST['preview']) && $_POST['preview'] === '1';
 $spreadsheet = IOFactory::load($_FILES['excelFile']['tmp_name']);
 $sheet       = $spreadsheet->getActiveSheet();
 $rows        = $sheet->toArray(null, true, true, false);
-$header      = $rows[0] ?? [];
-$conditionMHeader = strtoupper(trim((string)($header[8] ?? '')));
-$hasMaintenanceColumn = in_array($conditionMHeader, ['M', 'MAINTENANCE', 'MAINTENANCE QTY'], true);
 
-// Skip header row (index 0), collect data rows
+function normalizeImportHeader($value): string
+{
+    return preg_replace('/[^a-z0-9]+/', '', strtolower(trim((string) $value)));
+}
+
+function scoreImportHeaderRow(array $row): int
+{
+    $labels = array_map('normalizeImportHeader', $row);
+    $set = array_flip(array_filter($labels, fn($label) => $label !== ''));
+    $score = 0;
+
+    foreach (['equipmentid', 'id'] as $key) {
+        if (isset($set[$key])) { $score++; break; }
+    }
+    foreach (['equipment', 'equipmentname'] as $key) {
+        if (isset($set[$key])) { $score += 2; break; }
+    }
+    foreach (['newt', 't', 'total', 'totalqty'] as $key) {
+        if (isset($set[$key])) { $score++; break; }
+    }
+    foreach (['neww', 'w', 'working', 'workingqty'] as $key) {
+        if (isset($set[$key])) { $score++; break; }
+    }
+
+    return $score;
+}
+
+function findImportColumn(array $headerMap, array $names, ?int $fallback = null): ?int
+{
+    foreach ($names as $name) {
+        $key = normalizeImportHeader($name);
+        if (array_key_exists($key, $headerMap)) {
+            return $headerMap[$key];
+        }
+    }
+
+    return $fallback;
+}
+
+$headerRowIndex = 0;
+$bestHeaderScore = -1;
+$scanLimit = min(count($rows), 30);
+for ($i = 0; $i < $scanLimit; $i++) {
+    $score = scoreImportHeaderRow($rows[$i] ?? []);
+    if ($score > $bestHeaderScore) {
+        $bestHeaderScore = $score;
+        $headerRowIndex = $i;
+    }
+}
+
+$header = $rows[$headerRowIndex] ?? [];
+$conditionMHeader = strtoupper(trim((string)($header[8] ?? '')));
+$hasMaintenanceColumn = in_array($conditionMHeader, ['M', 'NEW - M', 'NEW M', 'MAINTENANCE', 'MAINTENANCE QTY'], true);
+
+$headerMap = [];
+foreach ($header as $idx => $label) {
+    $normalized = normalizeImportHeader($label);
+    if ($normalized !== '') {
+        $headerMap[$normalized] = $idx;
+    }
+}
+
+$col = [
+    'equipment_id' => findImportColumn($headerMap, ['Equipment ID', 'ID'], 0),
+    'equipment_name' => findImportColumn($headerMap, ['Equipment', 'Equipment Name'], 1),
+    'serial_number' => findImportColumn($headerMap, ['SN', 'Serial Number'], 2),
+    'internal_sn' => findImportColumn($headerMap, ['ISN', 'Internal SN'], 3),
+    'account_person' => findImportColumn($headerMap, ['ACC Person', 'Accountable Person'], 4),
+    'total_qty' => findImportColumn($headerMap, ['New - T', 'New T', 'T', 'Total', 'Total Qty'], 5),
+    'working_qty' => findImportColumn($headerMap, ['New - W', 'New W', 'W', 'Working', 'Working Qty'], 6),
+    'not_working_qty' => findImportColumn($headerMap, ['New - NW', 'New NW', 'NW', 'Not Working', 'Non-working', 'Not Working Qty'], 7),
+    'maintenance_qty' => findImportColumn($headerMap, ['New - M', 'New M', 'M', 'Maintenance', 'Maintenance Qty'], $hasMaintenanceColumn ? 8 : null),
+    'is_borrowable' => findImportColumn($headerMap, ['Borrowing Status', 'Visibility', 'Available for Borrowing', 'Is Borrowable', 'Borrowable'], null),
+    'description' => findImportColumn($headerMap, ['Description'], null),
+];
+
+$hasBorrowingStatusColumn = $col['is_borrowable'] !== null;
+
+// Skip metadata/header rows, collect data rows.
 $dataRows = [];
-for ($i = 1; $i < count($rows); $i++) {
+for ($i = $headerRowIndex + 1; $i < count($rows); $i++) {
     $r  = $rows[$i];
-    $id = trim((string)($r[0] ?? ''));
+    $id = trim((string)($r[$col['equipment_id']] ?? ''));
     if ($id === '') continue;
 
     $dataRows[] = [
         'equipment_id'   => $id,
-        'equipment_name' => trim((string)($r[1] ?? '')),
-        'serial_number'  => trim((string)($r[2] ?? '')),
-        'internal_sn'    => trim((string)($r[3] ?? '')),
-        'account_person' => trim((string)($r[4] ?? '')),
-        'total_qty'      => (int)($r[5] ?? 0),
-        'working_qty'    => (int)($r[6] ?? 0),
-        'not_working_qty'=> (int)($r[7] ?? 0),
-        'maintenance_qty'=> $hasMaintenanceColumn ? (int)($r[8] ?? 0) : 0,
-        'description'    => trim((string)($r[$hasMaintenanceColumn ? 9 : 8] ?? '')),
+        'equipment_name' => trim((string)($r[$col['equipment_name']] ?? '')),
+        'serial_number'  => trim((string)($r[$col['serial_number']] ?? '')),
+        'internal_sn'    => trim((string)($r[$col['internal_sn']] ?? '')),
+        'account_person' => trim((string)($r[$col['account_person']] ?? '')),
+        'total_qty'      => (int)($r[$col['total_qty']] ?? 0),
+        'working_qty'    => (int)($r[$col['working_qty']] ?? 0),
+        'not_working_qty'=> (int)($r[$col['not_working_qty']] ?? 0),
+        'maintenance_qty'=> $col['maintenance_qty'] !== null ? (int)($r[$col['maintenance_qty']] ?? 0) : 0,
+        'is_borrowable'  => $col['is_borrowable'] !== null ? parseBorrowableFlag($r[$col['is_borrowable']] ?? '1') : 1,
+        'description'    => $col['description'] !== null ? trim((string)($r[$col['description']] ?? '')) : '',
     ];
 }
 
@@ -85,6 +163,7 @@ if ($preview) {
 // ── IMPORT MODE — insert new rows, UPDATE existing ones ──
 $inserted = 0;
 $updated  = 0;
+$importedAt = date('Y-m-d H:i:s');
 
 foreach ($dataRows as $r) {
     $available = $r['working_qty'];
@@ -92,33 +171,69 @@ foreach ($dataRows as $r) {
     if (in_array($r['equipment_id'], $existingIds)) {
         // Update existing equipment
         // Only update description if it has a value
-        if ($r['description'] !== '') {
+        if ($r['description'] !== '' && $hasBorrowingStatusColumn) {
             $updateStmt = $conn->prepare("
                 UPDATE equipment SET
                     equipment_name = ?, serial_number = ?, internal_sn = ?,
                     account_person = ?, total_qty = ?, working_qty = ?,
-                    not_working_qty = ?, maintenance_qty = ?, available = ?, description = ?
+                    not_working_qty = ?, maintenance_qty = ?, available = ?, is_borrowable = ?,
+                    description = ?, last_imported_at = ?
                 WHERE equipment_id = ?
             ");
             $updateStmt->bind_param(
-                "ssssiiiiiss",
+                "ssssiiiiiisss",
                 $r['equipment_name'], $r['serial_number'], $r['internal_sn'],
                 $r['account_person'], $r['total_qty'], $r['working_qty'],
-                $r['not_working_qty'], $r['maintenance_qty'], $available, $r['description'], $r['equipment_id']
+                $r['not_working_qty'], $r['maintenance_qty'], $available, $r['is_borrowable'],
+                $r['description'], $importedAt, $r['equipment_id']
+            );
+        } elseif ($r['description'] !== '') {
+            $updateStmt = $conn->prepare("
+                UPDATE equipment SET
+                    equipment_name = ?, serial_number = ?, internal_sn = ?,
+                    account_person = ?, total_qty = ?, working_qty = ?,
+                    not_working_qty = ?, maintenance_qty = ?, available = ?,
+                    description = ?, last_imported_at = ?
+                WHERE equipment_id = ?
+            ");
+            $updateStmt->bind_param(
+                "ssssiiiiisss",
+                $r['equipment_name'], $r['serial_number'], $r['internal_sn'],
+                $r['account_person'], $r['total_qty'], $r['working_qty'],
+                $r['not_working_qty'], $r['maintenance_qty'], $available,
+                $r['description'], $importedAt, $r['equipment_id']
+            );
+        } elseif ($hasBorrowingStatusColumn) {
+            $updateStmt = $conn->prepare("
+                UPDATE equipment SET
+                    equipment_name = ?, serial_number = ?, internal_sn = ?,
+                    account_person = ?, total_qty = ?, working_qty = ?,
+                    not_working_qty = ?, maintenance_qty = ?, available = ?, is_borrowable = ?,
+                    last_imported_at = ?
+                WHERE equipment_id = ?
+            ");
+            $updateStmt->bind_param(
+                "ssssiiiiiiss",
+                $r['equipment_name'], $r['serial_number'], $r['internal_sn'],
+                $r['account_person'], $r['total_qty'], $r['working_qty'],
+                $r['not_working_qty'], $r['maintenance_qty'], $available, $r['is_borrowable'],
+                $importedAt, $r['equipment_id']
             );
         } else {
             $updateStmt = $conn->prepare("
                 UPDATE equipment SET
                     equipment_name = ?, serial_number = ?, internal_sn = ?,
                     account_person = ?, total_qty = ?, working_qty = ?,
-                    not_working_qty = ?, maintenance_qty = ?, available = ?
+                    not_working_qty = ?, maintenance_qty = ?, available = ?,
+                    last_imported_at = ?
                 WHERE equipment_id = ?
             ");
             $updateStmt->bind_param(
-                "ssssiiiiis",
+                "ssssiiiiiss",
                 $r['equipment_name'], $r['serial_number'], $r['internal_sn'],
                 $r['account_person'], $r['total_qty'], $r['working_qty'],
-                $r['not_working_qty'], $r['maintenance_qty'], $available, $r['equipment_id']
+                $r['not_working_qty'], $r['maintenance_qty'], $available, $importedAt,
+                $r['equipment_id']
             );
         }
         if ($updateStmt->execute()) $updated++;
@@ -128,14 +243,15 @@ foreach ($dataRows as $r) {
         $insertStmt = $conn->prepare("
             INSERT INTO equipment
             (equipment_id, equipment_name, serial_number, internal_sn, account_person,
-             total_qty, working_qty, not_working_qty, maintenance_qty, available, description)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             total_qty, working_qty, not_working_qty, maintenance_qty, available, is_borrowable,
+             description, last_imported_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $insertStmt->bind_param(
-            "sssssiiiiis",
+            "sssssiiiiiiss",
             $r['equipment_id'], $r['equipment_name'], $r['serial_number'], $r['internal_sn'],
             $r['account_person'], $r['total_qty'], $r['working_qty'], $r['not_working_qty'],
-            $r['maintenance_qty'], $available, $r['description']
+            $r['maintenance_qty'], $available, $r['is_borrowable'], $r['description'], $importedAt
         );
         if ($insertStmt->execute()) $inserted++;
         $insertStmt->close();
@@ -143,6 +259,11 @@ foreach ($dataRows as $r) {
 }
 
 $totalProcessed = $inserted + $updated;
+if ($totalProcessed > 0) {
+    setInventoryMetadata($conn, 'last_imported_at', $importedAt);
+    setInventoryMetadata($conn, 'last_edited_at', $importedAt);
+}
+
 $message = "Processed $totalProcessed item(s).";
 if ($inserted > 0) $message .= " Inserted: $inserted.";
 if ($updated > 0) $message .= " Updated: $updated.";

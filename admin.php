@@ -327,6 +327,63 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
       cursor: not-allowed;
     }
 
+    .inventory-meta-panel {
+      display: flex;
+      align-items: stretch;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .inventory-meta-group,
+    .equipment-id-legend {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 9px 12px;
+    }
+    .inventory-meta-item {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+      padding-right: 10px;
+      border-right: 1px solid var(--border);
+    }
+    .inventory-meta-item:last-child {
+      border-right: none;
+      padding-right: 0;
+    }
+    .inventory-meta-label,
+    .equipment-id-legend .legend-label {
+      color: var(--text-3);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .inventory-meta-item strong,
+    .equipment-id-legend span:not(.legend-label) {
+      color: var(--text-1);
+      font-size: 12px;
+    }
+    .equipment-id-legend strong {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      margin-right: 4px;
+      border-radius: 6px;
+      background: var(--surface-2);
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
     @keyframes slideUpBar {
       from { opacity:0; transform:translateY(12px); }
       to   { opacity:1; transform:none; }
@@ -454,7 +511,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
             <div class="inventory-preview-container" style="margin-top:12px;">
               <table class="preview-table">
                 <thead>
-                  <tr><th>ID</th><th>Equipment</th><th>SN</th><th>ISN</th><th>Acc Person</th><th>T</th><th>W</th><th>NW</th><th>M</th><th>Desc</th></tr>
+                  <tr><th>ID</th><th>Equipment</th><th>SN</th><th>ISN</th><th>Acc Person</th><th title="Total">T</th><th title="Working">W</th><th title="Not Working">NW</th><th title="Maintenance">M</th><th>Desc</th></tr>
                 </thead>
                 <tbody id="inventoryPreviewBody"></tbody>
               </table>
@@ -521,6 +578,10 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
               <option value="notWorking">Non-working</option>
               <option value="maintenance">Maintenance</option>
             </optgroup>
+            <optgroup label="Borrowing Visibility">
+              <option value="borrowable">Available for Borrowing</option>
+              <option value="restricted">Restricted / Hidden</option>
+            </optgroup>
           </select>
           <div class="search-bar">
             <input type="text" placeholder="Search equipment…" id="searchInput">
@@ -556,6 +617,26 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
           <span>Click any row to select it, then click <strong>Edit</strong> to edit equipment details. Admins can update <strong>T / W / NW / M</strong> quantities directly in the Condition columns. The <strong>🕐</strong> button on each row shows that equipment's change history.</span>
         </div>
 
+        <div class="inventory-meta-panel">
+          <div class="inventory-meta-group">
+            <div class="inventory-meta-item">
+              <span class="inventory-meta-label">Last Imported</span>
+              <strong id="inventoryLastImported">Never</strong>
+            </div>
+            <div class="inventory-meta-item">
+              <span class="inventory-meta-label">Last Edited</span>
+              <strong id="inventoryLastEdited">Never</strong>
+            </div>
+          </div>
+          <div class="equipment-id-legend" aria-label="Equipment ID prefix legend">
+            <span class="legend-label">Equipment ID Prefix</span>
+            <span><strong>E</strong> Equipment</span>
+            <span><strong>M</strong> Measuring Tools</span>
+            <span><strong>C</strong> Chemicals</span>
+            <span><strong>B</strong> Books</span>
+          </div>
+        </div>
+
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow);">
           <table id="equipmentTable">
             <thead>
@@ -566,6 +647,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
                 <th rowspan="2">SN</th>
                 <th rowspan="2">ISN</th>
                 <th rowspan="2">Acc Person</th>
+                <th rowspan="2">Visibility</th>
                 <th colspan="4">Condition</th>
                 <th rowspan="2">Description</th>
                 <th rowspan="2" style="width:44px;text-align:center;">Log</th>
@@ -664,6 +746,14 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
             <button onclick="closeAuditInterface()" style="background:var(--surface-2);padding:6px 12px;font-size:12px;">✕ Close</button>
           </div>
 
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;font-size:11px;color:var(--text-2);">
+            <strong style="color:var(--text-1);">Condition Legend:</strong>
+            <span title="Total" style="display:inline-flex;align-items:center;gap:4px;"><strong>T</strong> = Total</span>
+            <span title="Working" style="display:inline-flex;align-items:center;gap:4px;"><strong>W</strong> = Working</span>
+            <span title="Non-working" style="display:inline-flex;align-items:center;gap:4px;"><strong>NW</strong> = Non-working</span>
+            <span title="Maintenance" style="display:inline-flex;align-items:center;gap:4px;"><strong>M</strong> = Maintenance</span>
+          </div>
+
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
             <div class="search-bar" style="flex:1;min-width:200px;">
               <input type="text" placeholder="Search equipment…" id="auditSearchInput" onkeyup="filterAuditItems()">
@@ -697,8 +787,8 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
                 <thead style="position:sticky;top:0;background:var(--surface-2);z-index:1;">
                   <tr>
                     <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);">Equipment Name</th>
-                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:150px;">Expected<br><span style="font-weight:400;">T / W / NW / M</span></th>
-                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:250px;">Actual<br><span style="font-weight:400;">T / W / NW / M</span></th>
+                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:150px;">Previous<br><span style="font-weight:400;"><span title="Total">T</span> / <span title="Working">W</span> / <span title="Not Working">NW</span> / <span title="Maintenance">M</span></span></th>
+                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:250px;">New<br><span style="font-weight:400;"><span title="Total">T</span> / <span title="Working">W</span> / <span title="Not Working">NW</span> / <span title="Maintenance">M</span></span></th>
                     <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:140px;">Status</th>
                     <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);">Damage Notes</th>
                   </tr>
@@ -951,6 +1041,11 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
       </div>
       <label>Accountable Person</label>
       <input type="text" id="accountablePerson" />
+      <label>Borrowing Visibility</label>
+      <select id="borrowingStatus">
+        <option value="1">Available for Borrowing</option>
+        <option value="0">Restricted / Hidden from Guest Side</option>
+      </select>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
         <div><label>Total Qty</label><input type="number" id="totalQty" /></div>
         <div><label>Working</label><input type="number" id="workingQty" /></div>
@@ -996,7 +1091,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
           <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--accent-soft);border:1px solid #a8d5b5;"></span> New — will be imported
         </span>
         <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);">
-          <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--warn-soft);border:1px solid #f5c98a;"></span> Duplicate — will be skipped
+          <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--warn-soft);border:1px solid #f5c98a;"></span> Duplicate — matching inventory row will be overwritten
         </span>
       </div>
 
@@ -1011,6 +1106,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
               <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">SN</th>
               <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">ISN</th>
               <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Acc. Person</th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Visibility</th>
               <th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Total</th>
               <th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">W</th>
               <th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">NW</th>
@@ -1030,6 +1126,6 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
     </div>
   </div>
 
-  <script src="admin.js?v=20260505a"></script>
+  <script src="admin.js?v=20260507a"></script>
 </body>
 </html>

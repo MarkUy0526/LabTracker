@@ -2,8 +2,10 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 require 'db.php'; 
+require 'equipment_condition_helpers.php';
 
 header('Content-Type: application/json');
+ensureEquipmentInventoryControlColumns($conn);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = json_decode($_POST['data'], true);
@@ -44,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $updateEquipmentStmt = $conn->prepare("UPDATE equipment 
             SET available = available - ? 
-            WHERE equipment_name = ? AND available >= ?");
+            WHERE equipment_name = ? AND is_borrowable = 1 AND available >= ?");
 
         foreach ($equipmentList as $item) {
             $equipmentName = $item['equipmentName'];
@@ -56,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Exception('Failed to insert equipment: ' . $insertEquipmentStmt->error);
             }
 
-            $updateEquipmentStmt->bind_param("iss", $quantity, $equipmentName, $quantity);
+            $updateEquipmentStmt->bind_param("isi", $quantity, $equipmentName, $quantity);
             if (!$updateEquipmentStmt->execute()) {
                 throw new Exception('Failed to update equipment quantity: ' . $updateEquipmentStmt->error);
             }
@@ -78,4 +80,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     echo json_encode(['success' => false, 'message' => 'Invalid request method']);
     exit;
 }
-    

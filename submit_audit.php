@@ -9,6 +9,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
 }
 
 require 'db.php';
+require 'audit_snapshot_helpers.php';
 
 try {
   $data = json_decode(file_get_contents('php://input'), true);
@@ -18,8 +19,10 @@ try {
   }
 
   $audit_id = (int)$data['audit_id'];
+  $created_by = $_SESSION['username'] ?? ($_SESSION['admin_name'] ?? 'Admin');
 
   $conn->begin_transaction();
+  ensureInventoryAuditSnapshotTables($conn);
 
   // Get counts from audit_items
   $count_stmt = $conn->prepare("
@@ -58,11 +61,14 @@ try {
   );
   $update_stmt->execute();
 
+  $snapshot_id = captureAuditSnapshot($conn, $audit_id, $created_by);
+
   $conn->commit();
 
   echo json_encode([
     'success' => true,
     'message' => 'Audit submitted successfully',
+    'snapshot_id' => $snapshot_id,
     'summary' => [
       'total_items' => (int)$counts['total_items'],
       'complete_count' => (int)$counts['complete_count'],

@@ -888,6 +888,7 @@ select:focus, #categorySelect:focus {
 .modal-content input[type="text"],
 .modal-content input[type="number"],
 .modal-content input[type="password"],
+.modal-content select,
 .modal-content textarea {
   width: 100%;
   font-family: var(--font);
@@ -903,6 +904,7 @@ select:focus, #categorySelect:focus {
 }
 
 .modal-content input:focus,
+.modal-content select:focus,
 .modal-content textarea:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(45,106,79,.12);

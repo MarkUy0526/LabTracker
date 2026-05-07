@@ -14,6 +14,116 @@ function ensureEquipmentMaintenanceColumn(mysqli $conn): void
     );
 }
 
+function ensureEquipmentInventoryControlColumns(mysqli $conn): void
+{
+    $columns = [
+        'is_borrowable' => "ALTER TABLE equipment ADD COLUMN is_borrowable TINYINT(1) NOT NULL DEFAULT 1 AFTER available",
+        'last_imported_at' => "ALTER TABLE equipment ADD COLUMN last_imported_at DATETIME NULL DEFAULT NULL AFTER is_borrowable",
+        'last_edited_at' => "ALTER TABLE equipment ADD COLUMN last_edited_at DATETIME NULL DEFAULT NULL AFTER last_imported_at",
+    ];
+
+    foreach ($columns as $column => $sql) {
+        $escapedColumn = $conn->real_escape_string($column);
+        $result = $conn->query("SHOW COLUMNS FROM equipment LIKE '{$escapedColumn}'");
+        if (!$result || $result->num_rows === 0) {
+            $conn->query($sql);
+        }
+    }
+}
+
+function ensureInventoryMetadataTable(mysqli $conn): void
+{
+    $conn->query(
+        "CREATE TABLE IF NOT EXISTS inventory_metadata (
+            meta_key VARCHAR(64) NOT NULL PRIMARY KEY,
+            meta_value DATETIME NULL DEFAULT NULL,
+            updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )"
+    );
+}
+
+function setInventoryMetadata(mysqli $conn, string $key, ?string $value = null): void
+{
+    ensureInventoryMetadataTable($conn);
+    $timestamp = $value ?: date('Y-m-d H:i:s');
+    $stmt = $conn->prepare(
+        "INSERT INTO inventory_metadata (meta_key, meta_value)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)"
+    );
+
+    if (!$stmt) {
+        return;
+    }
+
+    $stmt->bind_param('ss', $key, $timestamp);
+    $stmt->execute();
+    $stmt->close();
+}
+
+function getInventoryMetadata(mysqli $conn): array
+{
+    ensureEquipmentInventoryControlColumns($conn);
+    ensureInventoryMetadataTable($conn);
+
+    $metadata = [
+        'last_imported_at' => null,
+        'last_edited_at' => null,
+    ];
+
+    $result = $conn->query(
+        "SELECT meta_key, meta_value
+         FROM inventory_metadata
+         WHERE meta_key IN ('last_imported_at', 'last_edited_at')"
+    );
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            if (array_key_exists($row['meta_key'], $metadata)) {
+                $metadata[$row['meta_key']] = $row['meta_value'];
+            }
+        }
+    }
+
+    $fallback = $conn->query(
+        "SELECT MAX(last_imported_at) AS last_imported_at,
+                MAX(last_edited_at) AS last_edited_at
+         FROM equipment"
+    );
+    if ($fallback) {
+        $row = $fallback->fetch_assoc();
+        foreach ($metadata as $key => $value) {
+            if (!$value && !empty($row[$key])) {
+                $metadata[$key] = $row[$key];
+            }
+        }
+    }
+
+    return $metadata;
+}
+
+function parseBorrowableFlag($value): int
+{
+    $text = strtolower(trim((string) $value));
+
+    if ($text === '') {
+        return 1;
+    }
+
+    $restrictedValues = [
+        '0',
+        'false',
+        'no',
+        'n',
+        'restricted',
+        'hidden',
+        'restricted / hidden from guest side',
+        'not borrowable',
+        'unavailable',
+    ];
+
+    return in_array($text, $restrictedValues, true) ? 0 : 1;
+}
+
 function ensureAuditItemConditionColumns(mysqli $conn): void
 {
     $columns = [

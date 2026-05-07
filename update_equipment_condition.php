@@ -13,6 +13,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
 }
 
 ensureEquipmentMaintenanceColumn($conn);
+ensureEquipmentInventoryControlColumns($conn);
 
 $equipmentID = trim($_POST['equipmentID'] ?? '');
 $fieldKey = trim($_POST['field'] ?? '');
@@ -80,10 +81,10 @@ if ($oldValue === $quantity) {
     exit;
 }
 
-$sql = "UPDATE equipment SET $column = ?";
+$sql = "UPDATE equipment SET $column = ?, last_edited_at = ?";
 $available = null;
 if ($column === 'working_qty') {
-    $sql .= ", available = ?";
+    $sql = "UPDATE equipment SET $column = ?, available = ?, last_edited_at = ?";
 }
 $sql .= " WHERE equipment_id = ?";
 
@@ -93,11 +94,12 @@ if (!$updateStmt) {
     exit;
 }
 
+$editedAt = date('Y-m-d H:i:s');
 if ($column === 'working_qty') {
     $available = $quantity - $borrowedQty;
-    $updateStmt->bind_param('iis', $quantity, $available, $equipmentID);
+    $updateStmt->bind_param('iiss', $quantity, $available, $editedAt, $equipmentID);
 } else {
-    $updateStmt->bind_param('is', $quantity, $equipmentID);
+    $updateStmt->bind_param('iss', $quantity, $editedAt, $equipmentID);
 }
 
 if (!$updateStmt->execute()) {
@@ -106,6 +108,7 @@ if (!$updateStmt->execute()) {
     exit;
 }
 $updateStmt->close();
+setInventoryMetadata($conn, 'last_edited_at', $editedAt);
 
 $logStmt = $conn->prepare(
     "INSERT INTO equipment_history

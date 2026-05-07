@@ -1,8 +1,10 @@
 <?php
 header('Content-Type: application/json');
 require 'db.php';
+require 'equipment_condition_helpers.php';
 
 date_default_timezone_set('Asia/Manila');
+ensureEquipmentInventoryControlColumns($conn);
 
 $equipmentID       = trim($_POST['equipmentID']       ?? '');
 $equipmentName     = trim($_POST['equipmentName']     ?? '');
@@ -10,6 +12,7 @@ $serialNumber      = trim($_POST['serialNumber']      ?? '');
 $internalSN        = trim($_POST['internalSN']        ?? '');
 $description       = trim($_POST['description']       ?? '');
 $accountablePerson = trim($_POST['accountablePerson'] ?? '');
+$isBorrowable      = parseBorrowableFlag($_POST['isBorrowable'] ?? '1');
 
 if ($equipmentID === '' || $equipmentName === '' || $accountablePerson === '') {
     echo json_encode(["success" => false, "message" => "Missing required fields."]);
@@ -17,7 +20,7 @@ if ($equipmentID === '' || $equipmentName === '' || $accountablePerson === '') {
 }
 
 $oldStmt = $conn->prepare(
-    "SELECT equipment_name, serial_number, internal_sn, account_person, description
+    "SELECT equipment_name, serial_number, internal_sn, account_person, description, is_borrowable
      FROM equipment WHERE equipment_id = ? LIMIT 1"
 );
 $oldData = [];
@@ -35,7 +38,9 @@ $stmt = $conn->prepare(
         serial_number = ?,
         internal_sn = ?,
         account_person = ?,
-        description = ?
+        description = ?,
+        is_borrowable = ?,
+        last_edited_at = ?
      WHERE equipment_id = ?"
 );
 
@@ -45,13 +50,16 @@ if (!$stmt) {
     exit;
 }
 
+$editedAt = date('Y-m-d H:i:s');
 $stmt->bind_param(
-    "ssssss",
+    "sssssiss",
     $equipmentName,
     $serialNumber,
     $internalSN,
     $accountablePerson,
     $description,
+    $isBorrowable,
+    $editedAt,
     $equipmentID
 );
 
@@ -62,6 +70,7 @@ if (!$stmt->execute()) {
     exit;
 }
 $stmt->close();
+setInventoryMetadata($conn, 'last_edited_at', $editedAt);
 
 $fieldLabels = [
     'equipment_name' => 'Equipment Name',
@@ -69,6 +78,7 @@ $fieldLabels = [
     'internal_sn'    => 'Internal SN',
     'account_person' => 'Accountable Person',
     'description'    => 'Description',
+    'is_borrowable'  => 'Borrowing Visibility',
 ];
 
 $newData = [
@@ -77,6 +87,7 @@ $newData = [
     'internal_sn'    => $internalSN,
     'account_person' => $accountablePerson,
     'description'    => $description,
+    'is_borrowable'  => (string) $isBorrowable,
 ];
 
 $now    = date('Y-m-d H:i:s');
@@ -92,6 +103,10 @@ if ($logStmt && !empty($oldData)) {
     foreach ($fieldLabels as $col => $label) {
         $oldVal = (string) ($oldData[$col] ?? '');
         $newVal = $newData[$col] ?? '';
+        if ($col === 'is_borrowable') {
+            $oldVal = ((int) $oldVal === 1) ? 'Available for Borrowing' : 'Restricted / Hidden from Guest Side';
+            $newVal = ((int) $newVal === 1) ? 'Available for Borrowing' : 'Restricted / Hidden from Guest Side';
+        }
 
         if ($oldVal !== $newVal) {
             $logStmt->bind_param(

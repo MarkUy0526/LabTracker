@@ -11,6 +11,7 @@ if ($conn->connect_error) {
 }
 
 ensureEquipmentMaintenanceColumn($conn);
+ensureEquipmentInventoryControlColumns($conn);
 
 $equipmentID       = trim($_POST['equipmentID']       ?? '');
 $equipmentName     = trim($_POST['equipmentName']     ?? '');
@@ -22,6 +23,7 @@ $notWorkingQty     = trim($_POST['notWorkingQty']     ?? '');
 $maintenanceQty    = trim($_POST['maintenanceQty']    ?? '0');
 $description       = trim($_POST['description']       ?? '');
 $accountablePerson = trim($_POST['accountablePerson'] ?? '');
+$isBorrowable      = parseBorrowableFlag($_POST['isBorrowable'] ?? '1');
 
 if (
     $equipmentID === '' || $equipmentName === '' || $totalQty === '' ||
@@ -60,8 +62,8 @@ $stmt = $conn->prepare(
     "INSERT INTO equipment
      (equipment_id, equipment_name, serial_number, internal_sn,
       total_qty, working_qty, not_working_qty, maintenance_qty,
-      description, account_person, available)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      description, account_person, available, is_borrowable)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 );
 
 if (!$stmt) {
@@ -70,7 +72,7 @@ if (!$stmt) {
 }
 
 $stmt->bind_param(
-    "ssssiiiissi",
+    "ssssiiiissii",
     $equipmentID,
     $equipmentName,
     $serialNumber,
@@ -81,7 +83,8 @@ $stmt->bind_param(
     $maintenanceQty,
     $description,
     $accountablePerson,
-    $available
+    $available,
+    $isBorrowable
 );
 
 if (!$stmt->execute()) {
@@ -102,9 +105,11 @@ $snapshot = json_encode([
     'not_working_qty' => $notWorkingQty,
     'maintenance_qty' => $maintenanceQty,
     'description'     => $description,
+    'borrow_visibility' => $isBorrowable ? 'Available for Borrowing' : 'Restricted / Hidden from Guest Side',
 ], JSON_UNESCAPED_UNICODE);
 
 $now    = date('Y-m-d H:i:s');
+setInventoryMetadata($conn, 'last_edited_at', $now);
 $action = 'Added';
 
 $logStmt = $conn->prepare(
