@@ -38,10 +38,10 @@ function scoreImportHeaderRow(array $row): int
     foreach (['equipment', 'equipmentname'] as $key) {
         if (isset($set[$key])) { $score += 2; break; }
     }
-    foreach (['newt', 't', 'total', 'totalqty'] as $key) {
+    foreach (['newreportt', 'newt', 't', 'total', 'totalqty'] as $key) {
         if (isset($set[$key])) { $score++; break; }
     }
-    foreach (['neww', 'w', 'working', 'workingqty'] as $key) {
+    foreach (['newreportw', 'neww', 'w', 'working', 'workingqty'] as $key) {
         if (isset($set[$key])) { $score++; break; }
     }
 
@@ -89,10 +89,10 @@ $col = [
     'serial_number' => findImportColumn($headerMap, ['SN', 'Serial Number'], 2),
     'internal_sn' => findImportColumn($headerMap, ['ISN', 'Internal SN'], 3),
     'account_person' => findImportColumn($headerMap, ['ACC Person', 'Accountable Person'], 4),
-    'total_qty' => findImportColumn($headerMap, ['New - T', 'New T', 'T', 'Total', 'Total Qty'], 5),
-    'working_qty' => findImportColumn($headerMap, ['New - W', 'New W', 'W', 'Working', 'Working Qty'], 6),
-    'not_working_qty' => findImportColumn($headerMap, ['New - NW', 'New NW', 'NW', 'Not Working', 'Non-working', 'Not Working Qty'], 7),
-    'maintenance_qty' => findImportColumn($headerMap, ['New - M', 'New M', 'M', 'Maintenance', 'Maintenance Qty'], $hasMaintenanceColumn ? 8 : null),
+    'total_qty' => findImportColumn($headerMap, ['New Report – T', 'New Report - T', 'New - T', 'New T', 'T', 'Total', 'Total Qty'], 5),
+    'working_qty' => findImportColumn($headerMap, ['New Report – W', 'New Report - W', 'New - W', 'New W', 'W', 'Working', 'Working Qty'], 6),
+    'not_working_qty' => findImportColumn($headerMap, ['New Report – NW', 'New Report - NW', 'New - NW', 'New NW', 'NW', 'Not Working', 'Non-working', 'Not Working Qty'], 7),
+    'maintenance_qty' => findImportColumn($headerMap, ['New Report – M', 'New Report - M', 'New - M', 'New M', 'M', 'Maintenance', 'Maintenance Qty'], $hasMaintenanceColumn ? 8 : null),
     'is_borrowable' => findImportColumn($headerMap, ['Borrowing Status', 'Visibility', 'Available for Borrowing', 'Is Borrowable', 'Borrowable'], null),
     'description' => findImportColumn($headerMap, ['Description'], null),
 ];

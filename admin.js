@@ -376,6 +376,22 @@ function auditChangeSummary(item) {
   return changes.length ? changes.join('; ') : 'No change from previous report';
 }
 
+function auditItemHasChanges(item) {
+  normalizeAuditItemQuantities(item);
+  const previousStatus = item.previous_status || 'Complete';
+  const previousNotes = (item.previous_notes || '').trim();
+  const currentNotes = (item.damage_notes || '').trim();
+
+  const qtyChanges = [
+    item.previous_qty !== item.actual_qty,
+    item.previous_working_qty !== item.actual_working_qty,
+    item.previous_not_working_qty !== item.actual_not_working_qty,
+    item.previous_maintenance_qty !== item.actual_maintenance_qty,
+  ];
+
+  return qtyChanges.some(c => c) || previousStatus !== (item.status || 'Complete') || previousNotes !== currentNotes || !item.previous_found;
+}
+
 function refreshAuditChangeSummary(row, item) {
   const summary = row?.querySelector('.audit-change-summary');
   if (summary) summary.textContent = auditChangeSummary(item);
@@ -829,15 +845,19 @@ function viewAuditDetail(auditId) {
       modal.style.cssText = 'position:fixed;inset:0;z-index:1200;background:rgba(26,26,24,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:20px;';
       modal.setAttribute('data-audit-id', auditId);
 
-      const itemsHtml = res.items.map(item => `
-        <tr>
+      const itemsHtml = res.items.map(item => {
+        const hasChanges = auditItemHasChanges(item);
+        const rowBg = hasChanges ? 'background:rgba(255, 193, 7, .08);' : '';
+        return `
+        <tr style="${rowBg}">
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.equipment_name)}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'previous')}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'actual')}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.status)}</td>
           <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(auditChangeSummary(item))}<br><span style="color:var(--text-3);">${escHtml(item.damage_notes || '')}</span></td>
         </tr>
-      `).join('');
+      `;
+      }).join('');
 
       modal.innerHTML = `
         <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);width:min(900px,100%);max-height:80vh;overflow-y:auto;padding:24px;box-shadow:var(--shadow-md);">
@@ -869,6 +889,7 @@ function viewAuditDetail(auditId) {
           </table>
 
           <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end;">
+            <button class="export-audit-xlsx-btn" data-audit-id="${auditId}" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">↓ Export XLSX</button>
             <button class="export-audit-csv-btn" data-audit-id="${auditId}" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">Export CSV</button>
             <button class="close-audit-modal" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;">Close</button>
           </div>
@@ -881,6 +902,13 @@ function viewAuditDetail(auditId) {
       modal.querySelectorAll('.close-audit-modal').forEach(btn => {
         btn.addEventListener('click', function() {
           modal.remove();
+        });
+      });
+
+      modal.querySelectorAll('.export-audit-xlsx-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const xlsxAuditId = this.getAttribute('data-audit-id');
+          exportAuditExcel(xlsxAuditId);
         });
       });
 
@@ -903,6 +931,15 @@ function exportAuditCSV(auditId) {
   }
   // Use window.open instead of window.location for better control
   const url = 'export_audit_csv.php?audit_id=' + encodeURIComponent(auditId);
+  window.open(url, '_blank');
+}
+
+function exportAuditExcel(auditId) {
+  if (!auditId) {
+    alert('Invalid audit ID');
+    return;
+  }
+  const url = 'export_audit_excel.php?audit_id=' + encodeURIComponent(auditId);
   window.open(url, '_blank');
 }
 

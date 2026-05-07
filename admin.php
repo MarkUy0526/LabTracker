@@ -737,6 +737,15 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
           </div>
         </div>
 
+        <!-- Condition Legend -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px;flex-wrap:wrap;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;font-size:11px;color:var(--text-2);">
+          <strong style="color:var(--text-1);">Condition Legend:</strong>
+          <span title="Total equipment count" style="display:inline-flex;align-items:center;gap:4px;"><strong>T</strong> = Total</span>
+          <span title="Operational equipment" style="display:inline-flex;align-items:center;gap:4px;"><strong>W</strong> = Working</span>
+          <span title="Broken or defective equipment" style="display:inline-flex;align-items:center;gap:4px;"><strong>NW</strong> = Non-working</span>
+          <span title="Equipment being serviced" style="display:inline-flex;align-items:center;gap:4px;"><strong>M</strong> = Maintenance</span>
+        </div>
+
         <!-- Audit Interface (initially hidden) -->
         <div id="auditChecklistSection" style="display:none;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
