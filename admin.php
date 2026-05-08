@@ -742,7 +742,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
           <strong style="color:var(--text-1);">Condition Legend:</strong>
           <span title="Total equipment count" style="display:inline-flex;align-items:center;gap:4px;"><strong>T</strong> = Total</span>
           <span title="Operational equipment" style="display:inline-flex;align-items:center;gap:4px;"><strong>W</strong> = Working</span>
-          <span title="Broken or defective equipment" style="display:inline-flex;align-items:center;gap:4px;"><strong>NW</strong> = Non-working</span>
+          <span title="Broken or defective equipment" style="display:inline-flex;align-items:center;gap:4px;"><strong>NW</strong> = Not-working</span>
           <span title="Equipment being serviced" style="display:inline-flex;align-items:center;gap:4px;"><strong>M</strong> = Maintenance</span>
         </div>
 
@@ -759,7 +759,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
             <strong style="color:var(--text-1);">Condition Legend:</strong>
             <span title="Total" style="display:inline-flex;align-items:center;gap:4px;"><strong>T</strong> = Total</span>
             <span title="Working" style="display:inline-flex;align-items:center;gap:4px;"><strong>W</strong> = Working</span>
-            <span title="Non-working" style="display:inline-flex;align-items:center;gap:4px;"><strong>NW</strong> = Non-working</span>
+            <span title="Not-working" style="display:inline-flex;align-items:center;gap:4px;"><strong>NW</strong> = Not-working</span>
             <span title="Maintenance" style="display:inline-flex;align-items:center;gap:4px;"><strong>M</strong> = Maintenance</span>
           </div>
 

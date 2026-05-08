@@ -141,6 +141,11 @@ try {
   $sheet->getStyle("A$row")->applyFromArray($metadataStyle);
   $row++;
 
+  $sheet->setCellValue("A$row", 'Timestamp (PST)');
+  $sheet->setCellValue("B$row", date('Y-m-d H:i:s', strtotime(date('Y-m-d H:i:s') . ' -8 hours')));
+  $sheet->getStyle("A$row")->applyFromArray($metadataStyle);
+  $row++;
+
   $sheet->setCellValue("A$row", 'Admin');
   $sheet->setCellValue("B$row", $audit['admin_name']);
   $sheet->getStyle("A$row")->applyFromArray($metadataStyle);
@@ -245,6 +250,31 @@ try {
   $sheet->getColumnDimension('H')->setWidth(12);
   $sheet->getColumnDimension('I')->setWidth(12);
   $sheet->getColumnDimension('J')->setWidth(20);
+
+  // Signatories section
+  $row += 3;
+  $sheet->setCellValue("A$row", 'Signatories');
+  $sheet->getStyle("A$row")->getFont()->setBold(true)->setSize(11);
+  $row += 2;
+
+  $signatories = ['Mr. Lester D. Bernardino', 'Mr. Hiromi Rivas'];
+  $colIndex = 1;
+  foreach ($signatories as $signatory) {
+    $colLetter = chr(64 + $colIndex);
+    $sheet->setCellValue("$colLetter$row", $signatory);
+    $sheet->getStyle("$colLetter$row")->getAlignment()->setHorizontal('center');
+    $row++;
+    $sheet->setCellValue("$colLetter$row", '_____________________');
+    $sheet->getStyle("$colLetter$row")->getAlignment()->setHorizontal('center');
+    $row++;
+    $sheet->setCellValue("$colLetter$row", 'Signature');
+    $sheet->getStyle("$colLetter$row")->getAlignment()->setHorizontal('center')->setWrapText(true);
+    $row++;
+    $sheet->setCellValue("$colLetter$row", date('m/d/Y'));
+    $sheet->getStyle("$colLetter$row")->getAlignment()->setHorizontal('center');
+    $row = $row - 3;
+    $colIndex++;
+  }
 
   $writer = new Xlsx($spreadsheet);
   header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

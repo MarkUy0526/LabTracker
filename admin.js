@@ -1180,7 +1180,7 @@ function renderSnapshot(snap) {
     account_person:  'Acc. Person',
     total_qty:       'Total',
     working_qty:     'Working',
-    not_working_qty: 'Not Working',
+    not_working_qty: 'Not-working',
     maintenance_qty: 'Maintenance',
     description:     'Description',
   };
@@ -1262,7 +1262,7 @@ function loadInventoryMetadata(items = null) {
 const INVENTORY_CONDITION_FIELDS = {
   total:       { itemKey: 'total_qty',       label: 'Total',       className: 'condition-t' },
   working:     { itemKey: 'working_qty',     label: 'Working',     className: 'condition-w' },
-  notWorking:  { itemKey: 'not_working_qty', label: 'Non-working', className: 'condition-nw' },
+  notWorking:  { itemKey: 'not_working_qty', label: 'Not-working', className: 'condition-nw' },
   maintenance: { itemKey: 'maintenance_qty', label: 'Maintenance', className: 'condition-m' }
 };
 

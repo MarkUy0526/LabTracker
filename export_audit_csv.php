@@ -213,6 +213,14 @@ try {
     ]);
   }
 
+  fputcsv($output, []);
+  fputcsv($output, ['Signatories']);
+  fputcsv($output, []);
+  fputcsv($output, ['Mr. Lester D. Bernardino', 'Mr. Hiromi Rivas']);
+  fputcsv($output, ['_____________________', '_____________________']);
+  fputcsv($output, ['Signature', 'Signature']);
+  fputcsv($output, [date('m/d/Y'), date('m/d/Y')]);
+
   fclose($output);
   exit;
 } catch (Exception $e) {
