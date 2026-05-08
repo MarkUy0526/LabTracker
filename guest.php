@@ -47,7 +47,7 @@ session_start();
             box-shadow: 0 8px 40px rgba(0,0,0,.18);
             display: flex;
             flex-direction: column;
-            max-height: min(calc(100dvh - 48px), 620px);
+            max-height: min(calc(100dvh - 48px), 480px);
             overflow: hidden;
             transform: translateY(24px) scale(.97);
             opacity: 0;
@@ -60,7 +60,7 @@ session_start();
 
         /* Header strip */
         .rules-header {
-            padding: 22px 28px 16px;
+            padding: 14px 20px 10px;
             border-bottom: 1px solid var(--border);
             flex-shrink: 0;
         }
@@ -68,7 +68,7 @@ session_start();
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 14px;
+            margin-bottom: 10px;
         }
         .rules-header h2 {
             font-size: 16px;
@@ -122,7 +122,7 @@ session_start();
             width: 50%;
             height: 100%;
             overflow-y: auto;
-            padding: 20px 28px;
+            padding: 14px 20px;
             box-sizing: border-box;
             -webkit-overflow-scrolling: touch;
         }
@@ -136,7 +136,7 @@ session_start();
             color: var(--text-2);
             text-transform: uppercase;
             letter-spacing: .07em;
-            margin-bottom: 14px;
+            margin-bottom: 8px;
         }
         .rules-slide ol {
             padding-left: 18px;
@@ -146,7 +146,7 @@ session_start();
             font-size: 13.5px;
             color: var(--text-2);
             line-height: 1.65;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
             padding-left: 4px;
         }
         .rules-slide ol li strong {
@@ -160,8 +160,8 @@ session_start();
             gap: 6px;
             font-size: 12px;
             color: var(--text-3);
-            margin-top: 16px;
-            padding: 10px 14px;
+            margin-top: 10px;
+            padding: 8px 12px;
             background: var(--surface-2);
             border-radius: var(--radius);
             transition: opacity .3s ease;
@@ -170,7 +170,7 @@ session_start();
 
         /* Agree section — hidden until scrolled to bottom of slide 2 */
         .rules-agree-section {
-            padding: 16px 28px 20px;
+            padding: 12px 20px 14px;
             border-top: 1px solid var(--border);
             flex-shrink: 0;
             overflow: hidden;
@@ -183,8 +183,8 @@ session_start();
         .rules-agree-section.visible {
             max-height: 140px;
             opacity: 1;
-            padding-top: 16px;
-            padding-bottom: 20px;
+            padding-top: 12px;
+            padding-bottom: 14px;
         }
         .rules-agree-label {
             display: flex;
@@ -192,7 +192,7 @@ session_start();
             gap: 10px;
             font-size: 13px;
             color: var(--text-2);
-            margin-bottom: 14px;
+            margin-bottom: 10px;
             cursor: pointer;
             line-height: 1.5;
         }
@@ -225,7 +225,7 @@ session_start();
 
         /* Footer nav (Next button) */
         .rules-footer {
-            padding: 12px 28px 16px;
+            padding: 10px 20px 12px;
             border-top: 1px solid var(--border);
             flex-shrink: 0;
             display: flex;
@@ -519,6 +519,135 @@ session_start();
         }
         .eq-card.selected .eq-card-selected-badge { display: flex; }
         .eq-card-selected-badge svg { width: 12px; height: 12px; }
+
+        /* ═══ DEPARTMENT-ROOM CONDITIONAL SELECT ═══ */
+        #departmentSelect {
+            transition: border-color 0.28s ease, opacity 0.28s ease;
+        }
+        #roomSelect {
+            transition: border-color 0.28s ease, opacity 0.28s ease, background-color 0.28s ease, color 0.28s ease;
+            cursor: pointer;
+        }
+        #roomSelect:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: var(--surface-2);
+            color: var(--text-3);
+            border-color: var(--border);
+        }
+        #roomSelect:not(:disabled) {
+            opacity: 1;
+            border-color: var(--accent);
+        }
+        #roomSelect:not(:disabled):hover {
+            background-color: var(--surface-2);
+        }
+        #roomSelect:not(:disabled):focus {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+        /* Custom text input for "Others" department */
+        #roomCustomInput {
+            transition: border-color 0.28s ease, opacity 0.28s ease;
+            display: none;
+            width: 200px;
+        }
+        #roomCustomInput.show {
+            display: inline-block;
+        }
+        #roomCustomInput:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* ═══ DEPARTMENT-INSTRUCTOR CONDITIONAL SELECT ═══ */
+        #instructorName {
+            transition: border-color 0.28s ease, opacity 0.28s ease, background-color 0.28s ease, color 0.28s ease;
+            cursor: pointer;
+        }
+        #instructorName:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: var(--surface-2);
+            color: var(--text-3);
+            border-color: var(--border);
+        }
+        #instructorName:not(:disabled) {
+            opacity: 1;
+            border-color: var(--accent);
+        }
+        #instructorName:not(:disabled):hover {
+            background-color: var(--surface-2);
+        }
+        #instructorName:not(:disabled):focus {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+        /* Custom text input for "Others" instructor */
+        #instructorCustomInput {
+            transition: border-color 0.28s ease, opacity 0.28s ease;
+            display: none;
+            width: 200px;
+        }
+        #instructorCustomInput.show {
+            display: inline-block;
+        }
+        #instructorCustomInput:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Custom text input for "Other" instructor */
+        #instructorCustomInput {
+            transition: border-color 0.28s ease, opacity 0.28s ease;
+            display: none !important;
+            width: 200px;
+        }
+        #instructorCustomInput.show {
+            display: inline-block !important;
+        }
+        #instructorCustomInput:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Hide select using class */
+        select.hidden-input {
+            display: none !important;
+        }
+
+        /* Align instructor inputs container */
+        #instructorInputsContainer {
+            display: inline-flex;
+            gap: 0;
+            align-items: center;
+        }
+        #instructorInputsContainer select,
+        #instructorInputsContainer input[type="text"] {
+            margin: 0;
+        }
+
+        /* Align room inputs */
+        #roomInputsContainer {
+            display: inline-flex;
+            gap: 0;
+            align-items: center;
+        }
+        #roomInputsContainer select,
+        #roomInputsContainer input[type="text"] {
+            margin: 0;
+        }
+
+        /* Dynamic asterisk */
+        .required-indicator {
+            color: var(--accent);
+            font-weight: 700;
+            display: inline;
+            transition: opacity 0.2s ease;
+        }
+        .required-indicator.hidden {
+            display: none;
+        }
     </style>
 </head>
 
@@ -675,7 +804,7 @@ session_start();
                     </tr>
                     <tr>
                         <td style="padding:5px;text-align:left;">
-                            <strong>Borrower's Name:</strong>
+                            <strong>Borrower's Name: <span class="required-indicator" id="borrowerRequired">*</span></strong>
                             <span style="display:inline-flex;align-items:center;gap:4px;margin-left:6px;">
                                 <input type="text" id="lastName"      placeholder="Last Name"  style="width:80px;">
                                 <input type="text" id="firstName"     placeholder="First Name" style="width:80px;">
@@ -684,32 +813,46 @@ session_start();
                             <input type="hidden" id="borrowerName" name="borrowerName">
                         </td>
                         <td style="padding:5px;text-align:left;">
-                            <strong>Instructor's Name:</strong>
-                            <select id="instructorName" style="width:200px;">
-                                <option value="" disabled selected>Select Instructor</option>
-                            </select>
+                            <strong>Instructor's Name: <span class="required-indicator" id="instructorRequired">*</span></strong>
+                            <div id="instructorInputsContainer">
+                                <select id="instructorName" style="width:200px;" disabled>
+                                    <option value="" disabled selected>Select a department first</option>
+                                </select>
+                                <input type="text" id="instructorCustomInput" placeholder="Enter instructor name" style="width:200px;">
+                            </div>
                         </td>
                     </tr>
                     <tr>
                         <td style="padding:5px;text-align:left;">
-                            <strong>Student ID:</strong>
+                            <strong>Student ID: <span class="required-indicator" id="studentIdRequired">*</span></strong>
                             <input type="text" id="studentID" maxlength="10" style="width:200px;" placeholder="Enter Student ID (max 10)">
                         </td>
                         <td style="padding:5px;text-align:left;">
-                            <strong>Subject Code:</strong>
+                            <strong>Subject Code: <span class="required-indicator" id="subjectCodeRequired">*</span></strong>
                             <input type="text" id="subjectCode" style="width:200px;" placeholder="Enter Subject Code">
                         </td>
                     </tr>
                     <tr>
                         <td style="padding:5px;text-align:left;">
-                            <strong>Date(s) of Usage of Equipment:</strong>
+                            <strong>Date(s) of Usage of Equipment: <span class="required-indicator" id="usageDateRequired">*</span></strong>
                             <input type="date" id="usageDate" style="width:160px;">
                         </td>
                         <td style="padding:5px;text-align:left;">
-                            <strong>Room:</strong>
-                            <select id="roomSelect">
-                                <option value="" disabled selected>Select Room</option>
+                            <strong>Department: <span class="required-indicator" id="departmentRequired">*</span></strong>
+                            <select id="departmentSelect" style="width:200px;">
+                                <option value="" disabled selected>Select a department</option>
                             </select>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" style="padding:5px;text-align:left;">
+                            <strong>Room: <span class="required-indicator" id="roomRequired">*</span></strong>
+                            <div id="roomInputsContainer">
+                                <select id="roomSelect" style="width:200px;" disabled>
+                                    <option value="" disabled selected>Select a department first</option>
+                                </select>
+                                <input type="text" id="roomCustomInput" placeholder="Enter your room" style="width:200px;">
+                            </div>
                         </td>
                     </tr>
                     <tr>
@@ -735,16 +878,11 @@ session_start();
                         </td>
                     </tr>
                     <tr>
-                        <td style="padding-top:30px;text-align:left;">
+                        <td colspan="2" style="padding-top:30px;text-align:left;">
                             <p>Approved by:<br><br>
-                            <div style="width:180px;height:60px;border:1.5px dashed #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px;margin-bottom:8px;background:#fafafa;">e-signature here</div>
-                            __________________________<br>
+                            <span class="hiromi-esig-slot"></span>
                             <em style="display:block;margin-top:4px;">Mr. Hiromi Rivas</em>
                             <em style="display:block;">Applied Physics Professor</em></p>
-                        </td>
-                        <td style="text-align:right;padding-top:30px;">
-                            <p>_________________________________<br>
-                            <em>Signature over Printed Name of Borrower</em></p>
                         </td>
                     </tr>
                 </table>
@@ -776,6 +914,7 @@ session_start();
                 <div class="review-field"><span class="r-label">Instructor</span><span class="r-value" id="rv-instructor"></span></div>
                 <div class="review-field"><span class="r-label">Student ID</span><span class="r-value" id="rv-student-id"></span></div>
                 <div class="review-field"><span class="r-label">Subject Code</span><span class="r-value" id="rv-subject"></span></div>
+                <div class="review-field"><span class="r-label">Department</span><span class="r-value" id="rv-department"></span></div>
                 <div class="review-field"><span class="r-label">Date of Usage</span><span class="r-value" id="rv-usage-date"></span></div>
                 <div class="review-field"><span class="r-label">Room</span><span class="r-value" id="rv-room"></span></div>
             </div>
@@ -821,6 +960,6 @@ session_start();
         </div>
     </div>
 
-    <script src="guest.js"></script>
+    <script src="guest.js?v=20260501b"></script>
 </body>
 </html>

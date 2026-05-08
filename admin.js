@@ -5,11 +5,19 @@ let selectedRow      = null;
 let selectedItemData = null;
 let canEditQty       = true;
 let currentEquipmentIDs = new Set();
+let hiromiSignatureUrl = '';
+let hiromiSignatureVersion = Date.now();
 
 // Inline edit state
 let editingRow      = null;
 let originalRowHTML = '';
 let currentEditItem = null;
+
+// Audit state
+let currentAuditID = null;
+let currentAuditData = { items: [], changes: {} };
+let auditSearchQuery = '';
+let auditStatusFilter = 'All';
 
 // ════════════════════════════════════════════════════════════════
 // PASSWORD — always required every click, no sessionStorage cache
@@ -92,9 +100,881 @@ function saveEquipmentLog(data, action) {
 function switchInvTab(tab) {
   document.getElementById('invPanelList').classList.toggle('active',    tab === 'list');
   document.getElementById('invPanelHistory').classList.toggle('active', tab === 'history');
+  document.getElementById('invPanelAudit').classList.toggle('active',   tab === 'audit');
   document.getElementById('invTabListBtn').classList.toggle('active',   tab === 'list');
   document.getElementById('invTabHistBtn').classList.toggle('active',   tab === 'history');
+  document.getElementById('invTabAuditBtn').classList.toggle('active',  tab === 'audit');
   if (tab === 'history') loadHistoryTab();
+  if (tab === 'audit') loadAuditSummary();
+}
+
+// ════════════════════════════════════════════════════════════════
+// INVENTORY AUDIT FEATURE
+// ════════════════════════════════════════════════════════════════
+
+function loadAuditSummary() {
+  fetch('get_last_audit_date.php')
+    .then(r => r.json())
+    .then(res => {
+      if (res.success) {
+        const lastDate = document.getElementById('lastAuditDate');
+        const nextDate = document.getElementById('nextScheduledDate');
+        if (lastDate) lastDate.textContent = res.last_audit_date ? formatAuditDate(res.last_audit_date) : 'Never';
+        if (nextDate) nextDate.textContent = res.next_scheduled_date ? formatAuditDate(res.next_scheduled_date) : '—';
+      }
+    })
+    .catch(err => console.error('Error loading audit summary:', err));
+
+  loadMostBorrowedEquipment();
+}
+
+function formatAuditDate(dateStr) {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function loadMostBorrowedEquipment() {
+  fetch('get_most_borrowed.php')
+    .then(r => r.json())
+    .then(res => {
+      if (res.success && res.data) {
+        const tbody = document.getElementById('mostBorrowedBody');
+        if (tbody) {
+          tbody.innerHTML = res.data.map((item, idx) => `
+            <tr>
+              <td style="padding:8px 10px;text-align:center;font-weight:600;">${item.rank}</td>
+              <td style="padding:8px 10px;text-align:left;">${escHtml(item.equipment_name)}</td>
+              <td style="padding:8px 10px;text-align:center;">${item.borrow_frequency}</td>
+              <td style="padding:8px 10px;text-align:center;">${item.total_qty_borrowed}</td>
+            </tr>
+          `).join('');
+        }
+      }
+    })
+    .catch(err => console.error('Error loading most borrowed equipment:', err));
+}
+
+function openStartAuditModal() {
+  const today = new Date().toISOString().split('T')[0];
+  const auditDateInput = document.createElement('input');
+  auditDateInput.type = 'date';
+  auditDateInput.value = today;
+  auditDateInput.id = 'startAuditDate';
+  auditDateInput.style.cssText = 'font-family:var(--font);font-size:12px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);width:100%;box-sizing:border-box;margin-bottom:12px;';
+
+  const adminInput = document.createElement('input');
+  adminInput.type = 'text';
+  adminInput.value = 'Admin';
+  adminInput.id = 'startAuditAdmin';
+  adminInput.style.cssText = 'font-family:var(--font);font-size:12px;padding:8px;border:1px solid var(--border);border-radius:var(--radius);width:100%;box-sizing:border-box;margin-bottom:16px;';
+
+  const modal = document.createElement('div');
+  modal.id = 'startAuditModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:1100;background:rgba(26,26,24,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow-md);width:min(400px,100%);padding:24px;">
+      <h2 style="font-size:16px;font-weight:600;color:var(--text-1);margin:0 0 16px 0;">Start New Inventory Audit</h2>
+      <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:6px;">Audit Date</label>
+      <div id="auditDateContainer"></div>
+      <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:6px;margin-top:12px;">Admin Name</label>
+      <div id="adminNameContainer"></div>
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button onclick="closeStartAuditModal()" style="flex:1;background:var(--surface-2);border:1px solid var(--border);padding:10px;border-radius:var(--radius);cursor:pointer;">← Back</button>
+        <button onclick="beginAudit()" style="flex:1;background:var(--accent);color:#fff;border:1px solid var(--accent);padding:10px;border-radius:var(--radius);cursor:pointer;font-weight:600;">Start Checking →</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  document.getElementById('auditDateContainer').appendChild(auditDateInput);
+  document.getElementById('adminNameContainer').appendChild(adminInput);
+}
+
+function closeStartAuditModal() {
+  const modal = document.getElementById('startAuditModal');
+  if (modal) modal.remove();
+}
+
+function beginAudit() {
+  const auditDateInput = document.getElementById('startAuditDate');
+  const adminInput = document.getElementById('startAuditAdmin');
+
+  if (!auditDateInput || !adminInput) return;
+
+  const auditDate = auditDateInput.value;
+  const adminName = adminInput.value.trim() || 'Admin';
+
+  const formData = new FormData();
+  formData.append('audit_date', auditDate);
+  formData.append('admin_name', adminName);
+
+  fetch('create_audit.php', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message);
+      currentAuditID = res.audit_id;
+      document.getElementById('auditDateDisplay').textContent = formatAuditDate(res.audit_date) + ' by ' + escHtml(res.admin_name);
+      closeStartAuditModal();
+      loadAuditChecklistItems();
+    })
+    .catch(err => {
+      alert('Error creating audit: ' + err.message);
+    });
+}
+
+function loadAuditChecklistItems() {
+  fetch('get_equipment_for_audit.php')
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success || !res.data) throw new Error(res.message);
+      currentAuditData.items = res.data;
+      currentAuditData.previousSnapshot = res.previous_snapshot || null;
+      renderAuditChecklistTable();
+      document.getElementById('auditChecklistSection').style.display = 'block';
+      filterAuditItems();
+    })
+    .catch(err => {
+      alert('Error loading equipment: ' + err.message);
+    });
+}
+
+function auditCount(value) {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function auditConditionTotal(item) {
+  return auditCount(item.actual_working_qty)
+    + auditCount(item.actual_not_working_qty)
+    + auditCount(item.actual_maintenance_qty);
+}
+
+function allocateAuditQuantities(total, working, notWorking, maintenance) {
+  total = auditCount(total);
+  working = auditCount(working);
+  notWorking = auditCount(notWorking);
+  maintenance = auditCount(maintenance);
+  const basisTotal = working + notWorking + maintenance;
+
+  if (total === 0) return { working: 0, notWorking: 0, maintenance: 0 };
+  if (basisTotal === 0) return { working: total, notWorking: 0, maintenance: 0 };
+
+  let nextWorking = Math.round(total * (working / basisTotal));
+  let nextNotWorking = Math.round(total * (notWorking / basisTotal));
+  let nextMaintenance = Math.round(total * (maintenance / basisTotal));
+  let diff = total - (nextWorking + nextNotWorking + nextMaintenance);
+
+  if (diff > 0) {
+    nextWorking += diff;
+  } else if (diff < 0) {
+    let remaining = Math.abs(diff);
+    const takeWorking = Math.min(nextWorking, remaining);
+    nextWorking -= takeWorking;
+    remaining -= takeWorking;
+    const takeNotWorking = Math.min(nextNotWorking, remaining);
+    nextNotWorking -= takeNotWorking;
+    remaining -= takeNotWorking;
+    nextMaintenance -= Math.min(nextMaintenance, remaining);
+  }
+
+  return { working: nextWorking, notWorking: nextNotWorking, maintenance: nextMaintenance };
+}
+
+function normalizeAuditItemQuantities(item) {
+  item.previous_qty = auditCount(item.previous_qty ?? item.expected_qty);
+  item.previous_working_qty = auditCount(item.previous_working_qty ?? item.expected_working_qty);
+  item.previous_not_working_qty = auditCount(item.previous_not_working_qty ?? item.expected_not_working_qty);
+  item.previous_maintenance_qty = auditCount(item.previous_maintenance_qty ?? item.expected_maintenance_qty);
+
+  if (item.previous_working_qty + item.previous_not_working_qty + item.previous_maintenance_qty === 0 && item.previous_qty > 0) {
+    item.previous_working_qty = item.previous_qty;
+  }
+
+  const hasActualBreakdown = ['actual_working_qty', 'actual_not_working_qty', 'actual_maintenance_qty']
+    .some(key => Object.prototype.hasOwnProperty.call(item, key));
+
+  item.actual_qty = auditCount(item.actual_qty);
+  item.actual_working_qty = auditCount(item.actual_working_qty);
+  item.actual_not_working_qty = auditCount(item.actual_not_working_qty);
+  item.actual_maintenance_qty = auditCount(item.actual_maintenance_qty);
+
+  if (!hasActualBreakdown && item.actual_qty > 0) {
+    const allocated = allocateAuditQuantities(
+      item.actual_qty,
+      item.previous_working_qty,
+      item.previous_not_working_qty,
+      item.previous_maintenance_qty
+    );
+    item.actual_working_qty = allocated.working;
+    item.actual_not_working_qty = allocated.notWorking;
+    item.actual_maintenance_qty = allocated.maintenance;
+  } else {
+    item.actual_qty = auditConditionTotal(item);
+  }
+}
+
+function formatAuditQtyGroup(item, prefix) {
+  const total = auditCount(item[`${prefix}_qty`]);
+  const working = auditCount(item[`${prefix}_working_qty`]);
+  const notWorking = auditCount(item[`${prefix}_not_working_qty`]);
+  const maintenance = auditCount(item[`${prefix}_maintenance_qty`]);
+  return `${total} / ${working} / ${notWorking} / ${maintenance}`;
+}
+
+function auditQtyComparisonHtml(item, prefix) {
+  normalizeAuditItemQuantities(item);
+  const fields = [
+    ['T', 'Total', `${prefix}_qty`, 'previous_qty'],
+    ['W', 'Working', `${prefix}_working_qty`, 'previous_working_qty'],
+    ['NW', 'Non-working', `${prefix}_not_working_qty`, 'previous_not_working_qty'],
+    ['M', 'Maintenance', `${prefix}_maintenance_qty`, 'previous_maintenance_qty'],
+  ];
+
+  return `
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(34px,1fr));gap:4px;font-family:var(--mono);">
+      ${fields.map(([label, title, valueKey, previousKey]) => {
+        const value = auditCount(item[valueKey]);
+        const changed = prefix === 'actual' && value !== auditCount(item[previousKey]);
+        return `
+          <span title="${title}" style="display:inline-flex;align-items:center;justify-content:center;gap:3px;padding:4px 5px;border-radius:6px;border:1px solid ${changed ? 'rgba(200,80,42,.45)' : 'var(--border)'};background:${changed ? 'rgba(200,80,42,.10)' : 'var(--surface)'};color:${changed ? 'var(--accent)' : 'var(--text-2)'};">
+            <strong style="font-family:var(--font);font-size:10px;">${label}</strong>${value}
+          </span>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function auditChangeSummary(item) {
+  normalizeAuditItemQuantities(item);
+  const changes = [];
+  const previousStatus = item.previous_status || 'Complete';
+  const previousNotes = (item.previous_notes || '').trim();
+  const currentNotes = (item.damage_notes || '').trim();
+
+  [
+    ['T', item.previous_qty, item.actual_qty],
+    ['W', item.previous_working_qty, item.actual_working_qty],
+    ['NW', item.previous_not_working_qty, item.actual_not_working_qty],
+    ['M', item.previous_maintenance_qty, item.actual_maintenance_qty],
+  ].forEach(([label, previousValue, currentValue]) => {
+    if (auditCount(previousValue) !== auditCount(currentValue)) {
+      changes.push(`${label}: ${auditCount(previousValue)} -> ${auditCount(currentValue)}`);
+    }
+  });
+
+  if (previousStatus !== (item.status || 'Complete')) {
+    changes.push(`Status: ${previousStatus} -> ${item.status || 'Complete'}`);
+  }
+  if (previousNotes !== currentNotes) {
+    changes.push('Notes changed');
+  }
+  if (!item.previous_found) {
+    changes.push('No previous snapshot record');
+  }
+
+  return changes.length ? changes.join('; ') : 'No change from previous report';
+}
+
+function auditItemHasChanges(item) {
+  normalizeAuditItemQuantities(item);
+  const previousStatus = item.previous_status || 'Complete';
+  const previousNotes = (item.previous_notes || '').trim();
+  const currentNotes = (item.damage_notes || '').trim();
+
+  const qtyChanges = [
+    item.previous_qty !== item.actual_qty,
+    item.previous_working_qty !== item.actual_working_qty,
+    item.previous_not_working_qty !== item.actual_not_working_qty,
+    item.previous_maintenance_qty !== item.actual_maintenance_qty,
+  ];
+
+  return qtyChanges.some(c => c) || previousStatus !== (item.status || 'Complete') || previousNotes !== currentNotes || !item.previous_found;
+}
+
+function refreshAuditChangeSummary(row, item) {
+  const summary = row?.querySelector('.audit-change-summary');
+  if (summary) summary.textContent = auditChangeSummary(item);
+}
+
+function updateAuditRowStatus(item, row) {
+  const statusSelect = row.querySelector('.audit-status-select');
+  if (statusSelect && statusSelect.value !== 'Damaged') {
+    if (item.actual_qty === item.previous_qty) {
+      item.status = 'Complete';
+      statusSelect.value = 'Complete';
+    } else if (item.actual_qty < item.previous_qty) {
+      item.status = 'Missing';
+      statusSelect.value = 'Missing';
+    } else {
+      item.status = 'Complete';
+      statusSelect.value = 'Complete';
+    }
+  }
+}
+
+function renderAuditChecklistTable() {
+  const tbody = document.getElementById('auditItemsBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = currentAuditData.items.map((item, idx) => {
+    normalizeAuditItemQuantities(item);
+    const status = determineAuditStatus(item);
+    item.status = status;
+    return `
+      <tr data-equipment-id="${escHtml(item.equipment_id)}" data-index="${idx}" style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 12px;text-align:left;">${escHtml(item.equipment_name)}</td>
+        <td style="padding:10px 12px;text-align:center;color:var(--text-2);font-family:var(--mono);font-size:12px;">${formatAuditQtyGroup(item, 'previous')}</td>
+        <td style="padding:10px 12px;text-align:center;">
+          <div style="display:grid;grid-template-columns:repeat(4,54px);gap:5px;justify-content:center;">
+            <input type="number" min="0" value="${item.actual_qty}" class="audit-total-input"
+                   title="Actual Total" data-index="${idx}"
+                   style="width:54px;text-align:center;padding:5px 4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text-1);font-family:var(--font);font-size:12px;outline:none;" />
+            <input type="number" min="0" value="${item.actual_working_qty}" class="audit-condition-input"
+                   title="Actual Working" data-index="${idx}" data-field="actual_working_qty"
+                   style="width:54px;text-align:center;padding:5px 4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--accent);font-family:var(--font);font-size:12px;outline:none;" />
+            <input type="number" min="0" value="${item.actual_not_working_qty}" class="audit-condition-input"
+                   title="Actual Not Working" data-index="${idx}" data-field="actual_not_working_qty"
+                   style="width:54px;text-align:center;padding:5px 4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--danger);font-family:var(--font);font-size:12px;outline:none;" />
+            <input type="number" min="0" value="${item.actual_maintenance_qty}" class="audit-condition-input"
+                   title="Actual Maintenance" data-index="${idx}" data-field="actual_maintenance_qty"
+                   style="width:54px;text-align:center;padding:5px 4px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--warn);font-family:var(--font);font-size:12px;outline:none;" />
+          </div>
+        </td>
+        <td style="padding:10px 12px;text-align:left;">
+          <select class="audit-status-select" data-index="${idx}"
+                  style="font-family:var(--font);font-size:12px;padding:5px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text-1);outline:none;">
+            <option value="Complete" ${status === 'Complete' ? 'selected' : ''}>Complete</option>
+            <option value="Missing" ${status === 'Missing' ? 'selected' : ''}>Missing</option>
+            <option value="Damaged" ${status === 'Damaged' ? 'selected' : ''}>Damaged</option>
+          </select>
+        </td>
+        <td style="padding:10px 12px;text-align:left;">
+          <textarea placeholder="Notes..." class="audit-damage-notes" data-index="${idx}" style="font-family:var(--font);font-size:11px;padding:4px 6px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text-1);width:100%;min-height:28px;resize:vertical;outline:none;">${escHtml(item.damage_notes || '')}</textarea>
+          <div class="audit-change-summary" style="margin-top:4px;font-size:10px;color:var(--text-3);line-height:1.35;">${escHtml(auditChangeSummary(item))}</div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  // Add event listeners after rendering
+  tbody.querySelectorAll('.audit-total-input').forEach(input => {
+    input.addEventListener('change', function() {
+      const idx = parseInt(this.getAttribute('data-index'));
+      const row = this.closest('tr');
+      if (idx >= 0 && row) {
+        const item = currentAuditData.items[idx];
+        if (item) {
+          const nextTotal = auditCount(this.value);
+          const allocated = allocateAuditQuantities(
+            nextTotal,
+            item.actual_working_qty || item.previous_working_qty,
+            item.actual_not_working_qty || item.previous_not_working_qty,
+            item.actual_maintenance_qty || item.previous_maintenance_qty
+          );
+          item.actual_working_qty = allocated.working;
+          item.actual_not_working_qty = allocated.notWorking;
+          item.actual_maintenance_qty = allocated.maintenance;
+          item.actual_qty = nextTotal;
+          row.querySelector('[data-field="actual_working_qty"]').value = allocated.working;
+          row.querySelector('[data-field="actual_not_working_qty"]').value = allocated.notWorking;
+          row.querySelector('[data-field="actual_maintenance_qty"]').value = allocated.maintenance;
+          updateAuditRowStatus(item, row);
+          refreshAuditChangeSummary(row, item);
+          filterAuditItems();
+        }
+      }
+    });
+  });
+
+  tbody.querySelectorAll('.audit-condition-input').forEach(input => {
+    input.addEventListener('change', function() {
+      const idx = parseInt(this.getAttribute('data-index'));
+      const field = this.getAttribute('data-field');
+      const row = this.closest('tr');
+      if (idx >= 0 && field && row) {
+        const item = currentAuditData.items[idx];
+        if (item) {
+          item[field] = auditCount(this.value);
+          item.actual_qty = auditConditionTotal(item);
+          row.querySelector('.audit-total-input').value = item.actual_qty;
+          updateAuditRowStatus(item, row);
+          refreshAuditChangeSummary(row, item);
+          filterAuditItems();
+        }
+      }
+    });
+  });
+
+  tbody.querySelectorAll('.audit-status-select').forEach(select => {
+    select.addEventListener('change', function() {
+      const idx = parseInt(this.getAttribute('data-index'));
+      if (idx >= 0) {
+        const item = currentAuditData.items[idx];
+        if (item) {
+          item.status = this.value;
+          refreshAuditChangeSummary(this.closest('tr'), item);
+          filterAuditItems();
+        }
+      }
+    });
+  });
+
+  tbody.querySelectorAll('.audit-damage-notes').forEach(textarea => {
+    textarea.addEventListener('change', function() {
+      const idx = parseInt(this.getAttribute('data-index'));
+      if (idx >= 0) {
+        const item = currentAuditData.items[idx];
+        if (item) {
+          item.damage_notes = this.value;
+          refreshAuditChangeSummary(this.closest('tr'), item);
+        }
+      }
+    });
+  });
+}
+
+function determineAuditStatus(item) {
+  if (item.status === 'Damaged') return 'Damaged';
+  normalizeAuditItemQuantities(item);
+  if (item.actual_qty === item.previous_qty) return 'Complete';
+  if (item.actual_qty < item.previous_qty) return 'Missing';
+  return 'Complete';
+}
+
+function filterAuditItems() {
+  const searchQuery = (document.getElementById('auditSearchInput')?.value || '').toLowerCase();
+  const statusFilter = document.getElementById('auditStatusFilter')?.value || 'All';
+
+  const tbody = document.getElementById('auditItemsBody');
+  if (!tbody) return;
+
+  let allCount = 0, completeCount = 0, missingCount = 0, damagedCount = 0;
+
+  Array.from(tbody.querySelectorAll('tr')).forEach(row => {
+    const equipmentName = row.textContent.toLowerCase();
+    const statusSelect = row.querySelector('.audit-status-select');
+    const status = statusSelect?.value || 'Complete';
+
+    const matchesSearch = equipmentName.includes(searchQuery);
+    const matchesStatus = statusFilter === 'All' || status === statusFilter;
+    const isVisible = matchesSearch && matchesStatus;
+
+    row.style.display = isVisible ? '' : 'none';
+
+    if (isVisible) {
+      allCount++;
+      if (status === 'Complete') completeCount++;
+      else if (status === 'Missing') missingCount++;
+      else if (status === 'Damaged') damagedCount++;
+    }
+  });
+
+  const countAll = document.getElementById('auditCountAll');
+  const countComplete = document.getElementById('auditCountComplete');
+  const countMissing = document.getElementById('auditCountMissing');
+  const countDamaged = document.getElementById('auditCountDamaged');
+
+  if (countAll) countAll.textContent = allCount;
+  if (countComplete) countComplete.textContent = completeCount;
+  if (countMissing) countMissing.textContent = missingCount;
+  if (countDamaged) countDamaged.textContent = damagedCount;
+}
+
+function saveDraftAudit() {
+  if (!currentAuditID) {
+    alert('No active audit');
+    return;
+  }
+
+  const items = currentAuditData.items.map(item => ({
+    equipment_id: item.equipment_id,
+    equipment_name: item.equipment_name,
+    previous_qty: item.previous_qty,
+    previous_working_qty: item.previous_working_qty || 0,
+    previous_not_working_qty: item.previous_not_working_qty || 0,
+    previous_maintenance_qty: item.previous_maintenance_qty || 0,
+    actual_qty: item.actual_qty || 0,
+    actual_working_qty: item.actual_working_qty || 0,
+    actual_not_working_qty: item.actual_not_working_qty || 0,
+    actual_maintenance_qty: item.actual_maintenance_qty || 0,
+    status: item.status || 'Complete',
+    damage_notes: item.damage_notes || ''
+  }));
+
+  if (items.length === 0) {
+    alert('No items to save');
+    return;
+  }
+
+  const payload = { audit_id: currentAuditID, items: items };
+
+  fetch('save_audit_items.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message);
+      console.log('Saved ' + items.length + ' items');
+      showAuditFeedback('Draft audit saved (' + items.length + ' items)');
+    })
+    .catch(err => {
+      console.error('Save error:', err);
+      alert('Error saving draft: ' + err.message);
+    });
+}
+
+function submitAudit() {
+  if (!currentAuditID) {
+    alert('No active audit');
+    return;
+  }
+
+  // First save all items
+  const items = currentAuditData.items.map(item => ({
+    equipment_id: item.equipment_id,
+    equipment_name: item.equipment_name,
+    previous_qty: item.previous_qty,
+    previous_working_qty: item.previous_working_qty || 0,
+    previous_not_working_qty: item.previous_not_working_qty || 0,
+    previous_maintenance_qty: item.previous_maintenance_qty || 0,
+    actual_qty: item.actual_qty || 0,
+    actual_working_qty: item.actual_working_qty || 0,
+    actual_not_working_qty: item.actual_not_working_qty || 0,
+    actual_maintenance_qty: item.actual_maintenance_qty || 0,
+    status: item.status || 'Complete',
+    damage_notes: item.damage_notes || ''
+  }));
+
+  if (items.length === 0) {
+    alert('No items to submit');
+    return;
+  }
+
+  // Save items first
+  fetch('save_audit_items.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audit_id: currentAuditID, items: items })
+  })
+    .then(r => r.json())
+    .then(saveRes => {
+      if (!saveRes.success) throw new Error(saveRes.message);
+
+      // Then submit the audit
+      return fetch('submit_audit.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audit_id: currentAuditID })
+      }).then(r => r.json());
+    })
+    .then(res => {
+      if (!res.success) throw new Error(res.message);
+
+      document.getElementById('auditChecklistSection').style.display = 'none';
+      document.getElementById('auditSummarySection').style.display = 'block';
+
+      // Store audit ID in hidden field
+      document.getElementById('currentAuditIdStorage').value = currentAuditID;
+
+      document.getElementById('summaryTotal').textContent = res.summary.total_items;
+      document.getElementById('summaryComplete').textContent = res.summary.complete_count;
+      document.getElementById('summaryMissing').textContent = res.summary.missing_count;
+      document.getElementById('summaryDamaged').textContent = res.summary.damaged_count;
+
+      showAuditFeedback('Audit submitted successfully!');
+    })
+    .catch(err => {
+      console.error('Submit error:', err);
+      alert('Error submitting audit: ' + err.message);
+    });
+}
+
+function viewCurrentAuditDetail() {
+  if (!currentAuditID) {
+    alert('Invalid audit ID');
+    return;
+  }
+
+  fetch('get_audit_details.php?audit_id=' + encodeURIComponent(currentAuditID))
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message);
+
+      const modal = document.createElement('div');
+      modal.id = 'auditDetailModal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:1200;background:rgba(26,26,24,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:20px;';
+
+      const itemsHtml = res.items.map(item => `
+        <tr>
+          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.equipment_name)}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'previous')}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'actual')}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.status)}</td>
+        </tr>
+      `).join('');
+
+      modal.innerHTML = `
+        <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);width:min(900px,100%);max-height:80vh;overflow-y:auto;padding:24px;box-shadow:var(--shadow-md);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h2 style="font-size:16px;font-weight:600;color:var(--text-1);margin:0;">Audit Details</h2>
+            <button class="close-detail-modal" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:20px;padding:0;width:30px;height:30px;">×</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px;">
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Audit ID</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${res.audit.id}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Snapshot</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${res.snapshot ? `#${res.snapshot.id} · ${escHtml(res.snapshot.snapshot_at)}` : 'Legacy'}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Date</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${formatAuditDate(res.audit.audit_date)}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Admin</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${escHtml(res.audit.admin_name)}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Complete</span><div style="font-size:14px;font-weight:600;color:var(--accent);">${res.audit.complete_count}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Missing</span><div style="font-size:14px;font-weight:600;color:var(--danger);">${res.audit.missing_count}</div></div>
+          </div>
+
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:var(--surface-2);">
+                <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Equipment</th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Previous Report <span title="Total">T</span>/<span title="Working">W</span>/<span title="Not Working">NW</span>/<span title="Maintenance">M</span></th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">New Report <span title="Total">T</span>/<span title="Working">W</span>/<span title="Not Working">NW</span>/<span title="Maintenance">M</span></th>
+                <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Status</th>
+              </tr>
+            </thead>
+            <tbody>${itemsHtml}</tbody>
+          </table>
+
+          <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end;">
+            <button class="export-current-audit-xlsx-btn" data-audit-id="${currentAuditID}" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">↓ Export XLSX</button>
+            <button class="close-detail-modal" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;">Close</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      // Add event listeners
+      modal.querySelectorAll('.close-detail-modal').forEach(btn => {
+        btn.addEventListener('click', function() {
+          modal.remove();
+        });
+      });
+
+      modal.querySelectorAll('.export-current-audit-xlsx-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const xlsxAuditId = this.getAttribute('data-audit-id');
+          exportAuditExcel(xlsxAuditId);
+        });
+      });
+    })
+    .catch(err => {
+      alert('Error loading audit details: ' + err.message);
+    });
+}
+
+function showAuditFeedback(message) {
+  const feedback = document.createElement('div');
+  feedback.style.cssText = `
+    position:fixed;bottom:20px;right:20px;z-index:2000;
+    background:var(--accent);color:#fff;
+    padding:12px 20px;border-radius:var(--radius);
+    font-size:12px;font-weight:600;
+    box-shadow:0 4px 12px rgba(0,0,0,.15);
+    animation:slideUpBar .3s ease-out;
+  `;
+  feedback.textContent = message;
+  document.body.appendChild(feedback);
+
+  setTimeout(() => feedback.remove(), 3000);
+}
+
+function showAuditPastAudits() {
+  document.getElementById('auditChecklistSection').style.display = 'none';
+  document.getElementById('auditSummarySection').style.display = 'none';
+  document.getElementById('pastAuditsSection').style.display = 'block';
+
+  fetch('get_audits.php')
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success || !res.data) throw new Error(res.message);
+
+      const tbody = document.getElementById('pastAuditsBody');
+      if (tbody) {
+        tbody.innerHTML = res.data.map(audit => `
+          <tr style="border-bottom:1px solid var(--border);" data-audit-id="${audit.id}">
+            <td style="padding:10px 12px;text-align:left;">${formatAuditDate(audit.audit_date)}</td>
+            <td style="padding:10px 12px;text-align:left;">${escHtml(audit.admin_name)}</td>
+            <td style="padding:10px 12px;text-align:center;color:var(--accent);font-weight:600;">${audit.complete_count}</td>
+            <td style="padding:10px 12px;text-align:center;color:var(--danger);font-weight:600;">${audit.missing_count}</td>
+            <td style="padding:10px 12px;text-align:center;color:var(--warn);font-weight:600;">${audit.damaged_count}</td>
+            <td style="padding:10px 12px;text-align:center;">
+              <button class="view-audit-details-btn" data-audit-id="${audit.id}" style="background:var(--surface-2);border:1px solid var(--border);padding:5px 10px;border-radius:var(--radius);cursor:pointer;font-size:11px;">View Details</button>
+            </td>
+          </tr>
+        `).join('');
+
+        // Add event listeners to buttons
+        document.querySelectorAll('.view-audit-details-btn').forEach(btn => {
+          btn.addEventListener('click', function() {
+            const auditId = this.getAttribute('data-audit-id');
+            viewAuditDetail(auditId);
+          });
+        });
+      }
+    })
+    .catch(err => {
+      alert('Error loading past audits: ' + err.message);
+    });
+}
+
+function viewAuditDetail(auditId) {
+  if (!auditId) {
+    alert('Invalid audit ID');
+    return;
+  }
+
+  fetch('get_audit_details.php?audit_id=' + encodeURIComponent(auditId))
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message);
+
+      const modal = document.createElement('div');
+      modal.id = 'auditDetailModal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:1200;background:rgba(26,26,24,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:20px;';
+      modal.setAttribute('data-audit-id', auditId);
+
+      const itemsHtml = res.items.map(item => {
+        const hasChanges = auditItemHasChanges(item);
+        const rowBg = hasChanges ? 'background:rgba(255, 193, 7, .08);' : '';
+        return `
+        <tr style="${rowBg}">
+          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.equipment_name)}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'previous')}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);text-align:center;">${auditQtyComparisonHtml(item, 'actual')}</td>
+          <td style="padding:8px;border-bottom:1px solid var(--border);">${escHtml(item.status)}</td>
+        </tr>
+      `;
+      }).join('');
+
+      modal.innerHTML = `
+        <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);width:min(900px,100%);max-height:80vh;overflow-y:auto;padding:24px;box-shadow:var(--shadow-md);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h2 style="font-size:16px;font-weight:600;color:var(--text-1);margin:0;">Audit Details</h2>
+            <button class="close-audit-modal" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:20px;padding:0;width:30px;height:30px;">×</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px;">
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Audit ID</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${res.audit.id}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Snapshot</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${res.snapshot ? `#${res.snapshot.id} · ${escHtml(res.snapshot.snapshot_at)}` : 'Legacy'}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Date</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${formatAuditDate(res.audit.audit_date)}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Admin</span><div style="font-size:14px;font-weight:600;color:var(--text-1);">${escHtml(res.audit.admin_name)}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Complete</span><div style="font-size:14px;font-weight:600;color:var(--accent);">${res.audit.complete_count}</div></div>
+            <div><span style="color:var(--text-3);font-size:11px;font-weight:600;text-transform:uppercase;">Missing</span><div style="font-size:14px;font-weight:600;color:var(--danger);">${res.audit.missing_count}</div></div>
+          </div>
+
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:var(--surface-2);">
+                <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Equipment</th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Previous Report <span title="Total">T</span>/<span title="Working">W</span>/<span title="Not Working">NW</span>/<span title="Maintenance">M</span></th>
+                <th style="padding:10px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">New Report <span title="Total">T</span>/<span title="Working">W</span>/<span title="Not Working">NW</span>/<span title="Maintenance">M</span></th>
+                <th style="padding:10px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Status</th>
+              </tr>
+            </thead>
+            <tbody>${itemsHtml}</tbody>
+          </table>
+
+          <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end;">
+            <button class="export-audit-xlsx-btn" data-audit-id="${auditId}" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;font-weight:600;">↓ Export XLSX</button>
+            <button class="close-audit-modal" style="background:var(--surface-2);border:1px solid var(--border);padding:10px 18px;border-radius:var(--radius);cursor:pointer;">Close</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(modal);
+
+      // Add event listeners
+      modal.querySelectorAll('.close-audit-modal').forEach(btn => {
+        btn.addEventListener('click', function() {
+          modal.remove();
+        });
+      });
+
+      modal.querySelectorAll('.export-audit-xlsx-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const xlsxAuditId = this.getAttribute('data-audit-id');
+          exportAuditExcel(xlsxAuditId);
+        });
+      });
+
+    })
+    .catch(err => {
+      alert('Error loading audit details: ' + err.message);
+    });
+}
+
+function exportAuditExcel(auditId) {
+  if (!auditId) {
+    alert('Invalid audit ID');
+    return;
+  }
+  const url = 'export_audit_excel.php?audit_id=' + encodeURIComponent(auditId);
+  window.open(url, '_blank');
+}
+
+function closeAuditInterface() {
+  document.getElementById('auditChecklistSection').style.display = 'none';
+  document.getElementById('auditSummarySection').style.display = 'block';
+  document.getElementById('pastAuditsSection').style.display = 'none';
+
+  currentAuditID = null;
+  currentAuditData = { items: [], changes: {} };
+  auditSearchQuery = '';
+  auditStatusFilter = 'All';
+
+  const searchInput = document.getElementById('auditSearchInput');
+  const filterSelect = document.getElementById('auditStatusFilter');
+  if (searchInput) searchInput.value = '';
+  if (filterSelect) filterSelect.value = 'All';
+}
+
+function resetToAuditSummary() {
+  closeAuditInterface();
+  loadAuditSummary();
+}
+
+function importAuditToInventory(auditId) {
+  const audit_id = auditId || currentAuditID;
+
+  console.log('importAuditToInventory called:', { auditId, currentAuditID, audit_id });
+
+  if (!audit_id) {
+    alert('No active audit');
+    return;
+  }
+
+  const itemCount = currentAuditData.items?.length || 'all';
+  const confirmed = confirm('This will update ' + itemCount + ' equipment quantities in the inventory based on audit results.\n\nContinue?');
+  if (!confirmed) return;
+
+  fetch('import_audit_to_inventory.php', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audit_id: audit_id })
+  })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message);
+      loadInventory();
+      loadInventoryPreview();
+      showAuditFeedback('✅ Imported! Updated ' + res.updated_count + ' equipment items');
+      setTimeout(() => {
+        alert('Inventory updated successfully!\n\n' + res.updated_count + ' equipment items were updated with audit data.');
+      }, 500);
+    })
+    .catch(err => {
+      alert('Error importing to inventory: ' + err.message);
+    });
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -300,7 +1180,8 @@ function renderSnapshot(snap) {
     account_person:  'Acc. Person',
     total_qty:       'Total',
     working_qty:     'Working',
-    not_working_qty: 'Not Working',
+    not_working_qty: 'Not-working',
+    maintenance_qty: 'Maintenance',
     description:     'Description',
   };
   let rows = '';
@@ -318,6 +1199,219 @@ function escHtml(str) {
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+function isEquipmentBorrowable(item) {
+  return parseInt(item?.is_borrowable ?? 1, 10) === 1;
+}
+
+function renderBorrowingStatusBadge(item) {
+  const borrowable = isEquipmentBorrowable(item);
+  const label = borrowable ? 'Available for Borrowing' : 'Restricted / Hidden';
+  const color = borrowable ? 'var(--accent)' : 'var(--warn)';
+  const bg = borrowable ? 'var(--accent-soft)' : 'var(--warn-soft)';
+  const border = borrowable ? '#a8d5b5' : '#f5c98a';
+  return `<span class="borrow-status-badge" style="display:inline-flex;align-items:center;justify-content:center;padding:3px 8px;border-radius:999px;border:1px solid ${border};background:${bg};color:${color};font-size:10.5px;font-weight:700;line-height:1.2;white-space:nowrap;">${label}</span>`;
+}
+
+function formatInventoryTimestamp(value) {
+  if (!value) return 'Never';
+  const normalized = String(value).replace(' ', 'T');
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+}
+
+function updateInventoryMetadataDisplay(metadata = {}) {
+  const importedEl = document.getElementById('inventoryLastImported');
+  const editedEl = document.getElementById('inventoryLastEdited');
+  if (importedEl) importedEl.textContent = formatInventoryTimestamp(metadata.last_imported_at);
+  if (editedEl) editedEl.textContent = formatInventoryTimestamp(metadata.last_edited_at);
+}
+
+function loadInventoryMetadata(items = null) {
+  fetch('get_inventory_metadata.php')
+    .then(r => r.json())
+    .then(res => {
+      if (res.success && res.metadata) {
+        updateInventoryMetadataDisplay(res.metadata);
+        return;
+      }
+      throw new Error(res.message || 'Unable to load inventory metadata.');
+    })
+    .catch(() => {
+      const sourceItems = Array.isArray(items) ? items : [];
+      const latest = (field) => sourceItems
+        .map(item => item[field])
+        .filter(Boolean)
+        .sort()
+        .pop() || null;
+
+      updateInventoryMetadataDisplay({
+        last_imported_at: latest('last_imported_at'),
+        last_edited_at: latest('last_edited_at')
+      });
+    });
+}
+
+const INVENTORY_CONDITION_FIELDS = {
+  total:       { itemKey: 'total_qty',       label: 'Total',       className: 'condition-t' },
+  working:     { itemKey: 'working_qty',     label: 'Working',     className: 'condition-w' },
+  notWorking:  { itemKey: 'not_working_qty', label: 'Not-working', className: 'condition-nw' },
+  maintenance: { itemKey: 'maintenance_qty', label: 'Maintenance', className: 'condition-m' }
+};
+
+function getInventoryRowSearchText(row) {
+  if (!row?.cells) return '';
+  return Array.from(row.cells).map(cell => cell.textContent || '').join(' ').toLowerCase();
+}
+
+function renderConditionQtyInput(item, fieldKey) {
+  const field = INVENTORY_CONDITION_FIELDS[fieldKey];
+  const value = toNonNegativeInt(item[field.itemKey]) ?? 0;
+  return `<input type="number"
+    class="condition-qty-input ${field.className}"
+    min="0"
+    value="${value}"
+    data-equipment-id="${escHtml(item.equipment_id || '')}"
+    data-condition-field="${fieldKey}"
+    data-previous-value="${value}"
+    title="Update ${escHtml(field.label)} quantity"
+    onclick="event.stopPropagation()"
+    ondblclick="event.stopPropagation()"
+    onfocus="this.dataset.previousValue=this.value"
+    onchange="updateEquipmentCondition(this)">`;
+}
+
+function updateEquipmentCondition(input) {
+  if (!input) return;
+  const equipmentID = input.dataset.equipmentId || '';
+  const fieldKey = input.dataset.conditionField || '';
+  const field = INVENTORY_CONDITION_FIELDS[fieldKey];
+  const previousValue = toNonNegativeInt(input.dataset.previousValue) ?? 0;
+  const nextValue = toNonNegativeInt(input.value);
+
+  if (!equipmentID || !field) return;
+  if (nextValue === null) {
+    input.value = previousValue;
+    alert('Condition quantity must be a whole number.');
+    return;
+  }
+  if (previousValue === nextValue) return;
+
+  input.disabled = true;
+  const formData = new FormData();
+  formData.append('equipmentID', equipmentID);
+  formData.append('field', fieldKey);
+  formData.append('quantity', String(nextValue));
+
+  fetch('update_equipment_condition.php', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message || 'Unable to update condition quantity.');
+      input.dataset.previousValue = String(nextValue);
+      loadInventoryMetadata();
+
+      if (selectedItemData && selectedItemData.equipment_id === equipmentID) {
+        selectedItemData[field.itemKey] = nextValue;
+        if (fieldKey === 'working' && res.available != null) selectedItemData.available = res.available;
+      }
+      if (currentEditItem && currentEditItem.equipment_id === equipmentID) {
+        currentEditItem[field.itemKey] = nextValue;
+        if (fieldKey === 'working' && res.available != null) currentEditItem.available = res.available;
+      }
+
+      showInventoryFeedback(`${field.label} quantity updated to ${nextValue}`);
+    })
+    .catch(err => {
+      input.value = previousValue;
+      alert(err.message || 'Condition quantity update failed.');
+    })
+    .finally(() => {
+      input.disabled = false;
+    });
+}
+
+function getHiromiSignatureSrc() {
+  if (!hiromiSignatureUrl) return '';
+  const joiner = hiromiSignatureUrl.includes('?') ? '&' : '?';
+  return `${hiromiSignatureUrl}${joiner}v=${hiromiSignatureVersion}`;
+}
+
+function buildHiromiSignatureImage() {
+  const src = getHiromiSignatureSrc();
+  if (src) {
+    return `<img src="${escHtml(src)}" alt="Mr. Hiromi Rivas e-signature" style="display:block;width:180px;height:60px;object-fit:contain;margin:8px 0;">`;
+  }
+  return `<div style="width:180px;height:60px;border:1.5px dashed #bbb;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#777;font-size:12px;margin:8px 0;background:#fafafa;">e-signature here</div>`;
+}
+
+function buildHiromiApprovalBlock(editable = false) {
+  return `
+    <strong>Approved by:</strong><br/>
+    <div class="hiromi-esig-slot">${buildHiromiSignatureImage()}</div>
+    ${editable ? `
+      <label style="display:inline-block;margin:2px 0 8px 0;padding:5px 10px;border:1px solid #bbb;border-radius:4px;background:#fff;cursor:pointer;font-size:12px;">
+        Upload e-signature
+        <input type="file" class="hiromi-esig-input" accept="image/png,image/jpeg,image/webp" style="display:none;">
+      </label>
+      <span class="hiromi-esig-status" style="display:block;color:#777;font-size:12px;min-height:16px;"></span>
+    ` : ''}
+    <em style="display:block;margin-top:4px;">Mr. Hiromi Rivas</em>
+    <em style="display:block;">Applied Physics Professor</em>`;
+}
+
+function refreshHiromiSignatureSlots() {
+  document.querySelectorAll('.hiromi-esig-slot').forEach(slot => {
+    slot.innerHTML = buildHiromiSignatureImage();
+  });
+}
+
+function loadHiromiSignature() {
+  return fetch('get_esignature.php')
+    .then(r => r.json())
+    .then(res => {
+      if (res.success && res.url) {
+        hiromiSignatureUrl = res.url;
+        hiromiSignatureVersion = Date.now();
+        refreshHiromiSignatureSlots();
+      }
+      return res;
+    })
+    .catch(err => console.warn('Unable to load e-signature:', err));
+}
+
+document.addEventListener('change', function(e) {
+  const input = e.target.closest('.hiromi-esig-input');
+  if (!input || !input.files || !input.files[0]) return;
+
+  const status = input.closest('td')?.querySelector('.hiromi-esig-status');
+  const formData = new FormData();
+  formData.append('signature', input.files[0]);
+  if (status) status.textContent = 'Uploading...';
+
+  fetch('upload_esignature.php', { method: 'POST', body: formData })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message || 'Upload failed');
+      hiromiSignatureUrl = res.url;
+      hiromiSignatureVersion = Date.now();
+      refreshHiromiSignatureSlots();
+      if (status) status.textContent = 'E-signature updated.';
+      input.value = '';
+    })
+    .catch(err => {
+      if (status) status.textContent = err.message || 'Upload failed.';
+      input.value = '';
+    });
+});
+
+document.addEventListener('DOMContentLoaded', loadHiromiSignature);
 
 document.addEventListener('click', function(e) {
   const pop = document.getElementById('historyPopover');
@@ -347,6 +1441,114 @@ function makeInlineInput(fieldName, type, value, disabled) {
   if (isTextarea) el.rows = 2;
   if (type === 'number') el.min = 0;
   return el;
+}
+
+function makeInlineSelect(fieldName, value) {
+  const el = document.createElement('select');
+  el.dataset.field = fieldName;
+  el.innerHTML = `
+    <option value="1">Available for Borrowing</option>
+    <option value="0">Restricted / Hidden from Guest Side</option>`;
+  el.value = String(parseInt(value ?? 1, 10) === 1 ? 1 : 0);
+  el.style.cssText = `
+    width:100%;box-sizing:border-box;
+    font-family:var(--font);font-size:12px;padding:4px 7px;
+    border:1.5px solid var(--accent);
+    border-radius:6px;background:var(--surface);color:var(--text-1);
+    outline:none;
+  `;
+  return el;
+}
+
+function toNonNegativeInt(value) {
+  if (value === '' || value === null || value === undefined) return null;
+  const num = Number(value);
+  if (!Number.isInteger(num) || num < 0) return null;
+  return num;
+}
+
+function validateInventoryValues(values, requireId = false) {
+  const equipmentID = (values.equipmentID || '').trim();
+  const equipmentName = (values.equipmentName || '').trim();
+  const accountablePerson = (values.accountablePerson || '').trim();
+  const totalQty = toNonNegativeInt(values.totalQty);
+  const workingQty = toNonNegativeInt(values.workingQty);
+  const notWorkingQty = toNonNegativeInt(values.notWorkingQty);
+  const maintenanceQty = toNonNegativeInt(values.maintenanceQty);
+
+  if (requireId && !equipmentID) return { valid: false, message: 'Equipment ID is required.' };
+  if (!equipmentName) return { valid: false, message: 'Equipment Name is required.' };
+  if (!accountablePerson) return { valid: false, message: 'Accountable Person is required.' };
+  if (totalQty === null || workingQty === null || notWorkingQty === null || maintenanceQty === null) {
+    return { valid: false, message: 'Total, Working, Non-working, and Maintenance must be whole numbers.' };
+  }
+  if ((workingQty + notWorkingQty + maintenanceQty) !== totalQty) {
+    return { valid: false, message: 'Working + Non-working + Maintenance must equal Total Qty.' };
+  }
+  if (workingQty === 0 && notWorkingQty === 0 && maintenanceQty === 0) {
+    return { valid: false, message: 'Select at least one condition count.' };
+  }
+  return { valid: true, totalQty, workingQty, notWorkingQty, maintenanceQty };
+}
+
+function validateEquipmentDetails(values, requireId = false) {
+  const equipmentID = (values.equipmentID || '').trim();
+  const equipmentName = (values.equipmentName || '').trim();
+  const accountablePerson = (values.accountablePerson || '').trim();
+
+  if (requireId && !equipmentID) return { valid: false, message: 'Equipment ID is required.' };
+  if (!equipmentName) return { valid: false, message: 'Equipment Name is required.' };
+  if (!accountablePerson) return { valid: false, message: 'Accountable Person is required.' };
+  return { valid: true };
+}
+
+function setButtonDisabledState(btn, disabled) {
+  if (!btn) return;
+  btn.disabled = disabled;
+  btn.style.opacity = disabled ? '.55' : '1';
+  btn.style.cursor = disabled ? 'not-allowed' : 'pointer';
+}
+
+function showInventoryFeedback(message) {
+  let toast = document.getElementById('inventoryFeedbackToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'inventoryFeedbackToast';
+    toast.style.cssText = `
+      position:fixed;right:28px;bottom:88px;z-index:1400;
+      background:var(--accent);color:#fff;border-radius:var(--radius);
+      padding:10px 14px;box-shadow:0 8px 28px rgba(0,0,0,.18);
+      font-family:var(--font);font-size:13px;font-weight:600;
+      max-width:340px;opacity:0;transform:translateY(8px);
+      transition:opacity .18s ease, transform .18s ease;
+    `;
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  requestAnimationFrame(() => {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+  });
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(8px)';
+  }, 3200);
+}
+
+function buildInventoryUpdateMessage(equipmentName, previousNotWorking, nextNotWorking) {
+  const deltaNotWorking = Math.max(0, nextNotWorking - previousNotWorking);
+  if (deltaNotWorking > 0) {
+    return `Inventory updated: ${deltaNotWorking} item${deltaNotWorking === 1 ? '' : 's'} marked as Not Working`;
+  }
+  return `Inventory updated: ${equipmentName} saved`;
+}
+
+function confirmRiskyInventoryUpdate(previousNotWorking, nextNotWorking) {
+  if (nextNotWorking > previousNotWorking) {
+    return confirm('This will update inventory counts and mark items as Not Working. Continue?');
+  }
+  return true;
 }
 
 function createStickyActionBar(item) {
@@ -404,6 +1606,52 @@ function createStickyActionBar(item) {
   return bar;
 }
 
+function getInlineInventoryValues() {
+  function val(fieldName) {
+    const el = editingRow?.querySelector(`[data-field="${fieldName}"]`);
+    return el ? el.value.trim() : '';
+  }
+
+  return {
+    equipmentID: currentEditItem?.equipment_id || '',
+    equipmentName: val('equipmentName'),
+    accountablePerson: val('accountablePerson'),
+    isBorrowable: val('isBorrowable') || '1'
+  };
+}
+
+function updateInlineEditSaveState() {
+  if (!editingRow) return;
+  const saveBtn = document.getElementById('inlineEditSaveBtn');
+  const validation = validateEquipmentDetails(getInlineInventoryValues());
+  setButtonDisabledState(saveBtn, !validation.valid);
+  if (saveBtn) saveBtn.title = validation.valid ? '' : validation.message;
+}
+
+function getAddInventoryValues() {
+  const get = id => document.getElementById(id)?.value.trim() || '';
+  return {
+    equipmentID: get('equipmentID'),
+    equipmentName: get('equipmentName'),
+    accountablePerson: get('accountablePerson'),
+    isBorrowable: document.getElementById('borrowingStatus')?.value || '1',
+    totalQty: get('totalQty'),
+    workingQty: get('workingQty'),
+    notWorkingQty: get('notWorkingQty'),
+    maintenanceQty: get('maintenanceQty')
+  };
+}
+
+function updateAddEquipmentSaveState() {
+  const submitBtn = document.getElementById('submitEquipmentBtn');
+  const validation = validateInventoryValues(getAddInventoryValues(), true);
+  const duplicate = currentEquipmentIDs.has(getAddInventoryValues().equipmentID);
+  setButtonDisabledState(submitBtn, !validation.valid || duplicate);
+  if (submitBtn) {
+    submitBtn.title = duplicate ? 'Equipment ID already exists.' : (validation.valid ? '' : validation.message);
+  }
+}
+
 function removeStickyBar() {
   const b = document.getElementById('inlineEditBar');
   if (b) b.remove();
@@ -414,8 +1662,6 @@ function enterInlineEdit(row, item) {
   editingRow      = row;
   originalRowHTML = row.innerHTML;
   currentEditItem = item;
-
-  const borrowed = parseInt(item.available) !== parseInt(item.working_qty);
 
   // Handle image column (cell 1) separately
   const imageCell = row.cells[1];
@@ -479,18 +1725,15 @@ function enterInlineEdit(row, item) {
     imageCell.appendChild(container);
   }
 
-  // All other fields (shifted by 1 due to new image column)
+  // Equipment detail editing intentionally skips the Condition cell.
   const fields = [
     [0, 'equipmentID',       'text',     item.equipment_id,    true],
     [2, 'equipmentName',     'text',     item.equipment_name,  false],
     [3, 'serialNumber',      'text',     item.serial_number,   false],
     [4, 'internalSN',        'text',     item.internal_sn,     false],
     [5, 'accountablePerson', 'text',     item.account_person,  false],
-    [6, 'totalQty',          'number',   item.total_qty,       borrowed],
-    [7, 'workingQty',        'number',   item.working_qty,     borrowed],
-    [8, 'notWorkingQty',     'number',   item.not_working_qty, borrowed],
-    [9, 'description',       'textarea', item.description,     false],
-    // cell 10 is the history button — leave intact
+    [11, 'description',      'textarea', item.description,     false],
+    // cell 12 is the history button.
   ];
 
   fields.forEach(([cellIdx, fieldName, type, value, dis]) => {
@@ -502,9 +1745,22 @@ function enterInlineEdit(row, item) {
     cell.appendChild(makeInlineInput(fieldName, type, value, dis));
   });
 
+  const visibilityCell = row.cells[6];
+  if (visibilityCell) {
+    visibilityCell.innerHTML = '';
+    visibilityCell.style.verticalAlign = 'top';
+    visibilityCell.style.padding = '6px 8px';
+    visibilityCell.appendChild(makeInlineSelect('isBorrowable', item.is_borrowable));
+  }
+
   row.style.background = 'var(--accent-soft)';
   removeStickyBar();
   document.body.appendChild(createStickyActionBar(item));
+  row.querySelectorAll('input[data-field], textarea[data-field], select[data-field]').forEach(el => {
+    el.addEventListener('input', updateInlineEditSaveState);
+    el.addEventListener('change', updateInlineEditSaveState);
+  });
+  updateInlineEditSaveState();
 }
 
 function cancelInlineEdit() {
@@ -535,13 +1791,19 @@ function saveInlineEdit() {
   const serialNumber      = val('serialNumber');
   const internalSN        = val('internalSN');
   const accountablePerson = val('accountablePerson');
-  const totalQty          = val('totalQty')      || String(currentEditItem.total_qty);
-  const workingQty        = val('workingQty')    || String(currentEditItem.working_qty);
-  const notWorkingQty     = val('notWorkingQty') || String(currentEditItem.not_working_qty);
+  const totalQty          = String(currentEditItem.total_qty ?? 0);
+  const workingQty        = String(currentEditItem.working_qty ?? 0);
+  const notWorkingQty     = String(currentEditItem.not_working_qty ?? 0);
+  const maintenanceQty    = String(currentEditItem.maintenance_qty ?? 0);
   const description       = val('description');
+  const isBorrowable      = val('isBorrowable') || '1';
 
-  if (!equipmentName || !accountablePerson) {
-    alert('Equipment Name and Accountable Person are required.');
+  const validation = validateEquipmentDetails({
+    equipmentName,
+    accountablePerson
+  });
+  if (!validation.valid) {
+    alert(validation.message);
     return;
   }
 
@@ -557,8 +1819,10 @@ function saveInlineEdit() {
   formData.append('totalQty', totalQty);
   formData.append('workingQty', workingQty);
   formData.append('notWorkingQty', notWorkingQty);
+  formData.append('maintenanceQty', maintenanceQty);
   formData.append('description', description);
   formData.append('accountablePerson', accountablePerson);
+  formData.append('isBorrowable', isBorrowable);
 
   // Add image file if selected
   const imageInput = document.getElementById('equipmentImageInput');
@@ -592,6 +1856,7 @@ function saveInlineEdit() {
         selectedRow = null; selectedItemData = null;
         loadInventory();
         loadInventoryPreview();
+        showInventoryFeedback(`Inventory updated: ${equipmentName} saved`);
       } else {
         alert('Error saving: ' + (res.message || 'Unknown error'));
         if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save changes'; }
@@ -608,17 +1873,527 @@ function saveInlineEdit() {
 // ════════════════════════════════════════════════════════════════
 // DOCUMENT READY
 // ════════════════════════════════════════════════════════════════
+const reportsState = {
+  data: [],
+  filteredData: [],
+  currentPage: 1,
+  rowsPerPage: 10,
+  search: '',
+  status: 'All',
+  from: '',
+  to: ''
+};
+
+function moveScheduleSummaryToReports() {
+  const summary = document.getElementById('statsSummary');
+  const mount = document.getElementById('reportsSummaryMount');
+  if (!summary || !mount) return;
+  if (summary.parentElement !== mount) mount.appendChild(summary);
+  summary.style.marginTop = '0';
+}
+
+function switchReportsTab(tab) {
+  moveScheduleSummaryToReports();
+  document.getElementById('reportsPanelList')?.classList.toggle('active', tab === 'list');
+  document.getElementById('reportsPanelSummary')?.classList.toggle('active', tab === 'summary');
+  document.getElementById('reportsTabListBtn')?.classList.toggle('active', tab === 'list');
+  document.getElementById('reportsTabSummaryBtn')?.classList.toggle('active', tab === 'summary');
+
+  if (tab === 'summary') {
+    initScheduleCharts();
+    setTimeout(() => {
+      if (trendChart && typeof trendChart.resize === 'function') trendChart.resize();
+    }, 80);
+  }
+}
+
+function initReportsControls() {
+  moveScheduleSummaryToReports();
+
+  const rowsSelect = document.getElementById('reportsRowsPerPage');
+  if (rowsSelect) reportsState.rowsPerPage = parseInt(rowsSelect.value, 10) || reportsState.rowsPerPage;
+
+  document.getElementById('reportsSearch')?.addEventListener('input', e => {
+    reportsState.search = e.target.value.trim().toLowerCase();
+    applyReportsFilters(true);
+    renderReportsPage();
+  });
+
+  document.getElementById('reportsStatusFilter')?.addEventListener('change', e => {
+    reportsState.status = e.target.value || 'All';
+    applyReportsFilters(true);
+    renderReportsPage();
+  });
+
+  document.getElementById('reportsFrom')?.addEventListener('change', e => {
+    reportsState.from = e.target.value || '';
+    applyReportsFilters(true);
+    renderReportsPage();
+  });
+
+  document.getElementById('reportsTo')?.addEventListener('change', e => {
+    reportsState.to = e.target.value || '';
+    applyReportsFilters(true);
+    renderReportsPage();
+  });
+
+  document.getElementById('reportsFilterBtn')?.addEventListener('click', () => {
+    reportsState.from = document.getElementById('reportsFrom')?.value || '';
+    reportsState.to = document.getElementById('reportsTo')?.value || '';
+    applyReportsFilters(true);
+    renderReportsPage();
+  });
+
+  document.getElementById('reportsClearBtn')?.addEventListener('click', () => {
+    const search = document.getElementById('reportsSearch');
+    const status = document.getElementById('reportsStatusFilter');
+    const from = document.getElementById('reportsFrom');
+    const to = document.getElementById('reportsTo');
+    if (search) search.value = '';
+    if (status) status.value = 'All';
+    if (from) from.value = '';
+    if (to) to.value = '';
+    reportsState.search = '';
+    reportsState.status = 'All';
+    reportsState.from = '';
+    reportsState.to = '';
+    applyReportsFilters(true);
+    renderReportsPage();
+  });
+
+  rowsSelect?.addEventListener('change', e => {
+    reportsState.rowsPerPage = parseInt(e.target.value, 10) || 10;
+    reportsState.currentPage = 1;
+    renderReportsPage();
+  });
+
+  document.getElementById('reportsGoToPage')?.addEventListener('change', e => {
+    setReportsPage(parseInt(e.target.value, 10) || 1);
+  });
+
+  document.getElementById('reportsGoToPage')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') setReportsPage(parseInt(e.target.value, 10) || 1);
+  });
+
+  document.getElementById('reportsPagination')?.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn || btn.disabled) return;
+    const action = btn.dataset.pageAction;
+    const totalPages = getReportsTotalPages();
+    if (btn.dataset.page) {
+      setReportsPage(parseInt(btn.dataset.page, 10));
+    } else if (action === 'first') {
+      setReportsPage(1);
+    } else if (action === 'prev') {
+      setReportsPage(reportsState.currentPage - 1);
+    } else if (action === 'next') {
+      setReportsPage(reportsState.currentPage + 1);
+    } else if (action === 'last') {
+      setReportsPage(totalPages);
+    }
+  });
+}
+
+document.addEventListener('DOMContentLoaded', initReportsControls);
+
+function getReportDate(entry) {
+  return String(entry.borrowRequest?.date || '').split(/[T\s]/)[0];
+}
+
+function getReportSearchText(entry) {
+  const req = entry.borrowRequest || {};
+  const equipment = (entry.equipmentList || []).map(eq => eq.equipment_name).join(' ');
+  return [
+    req.borrower_name,
+    req.guest_number,
+    req.student_id,
+    req.instructor_name,
+    req.subject_code,
+    req.department,
+    req.room,
+    req.status,
+    req.usage_date,
+    req.date,
+    equipment
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function applyReportsFilters(resetPage = false) {
+  reportsState.filteredData = reportsState.data.filter(entry => {
+    const req = entry.borrowRequest || {};
+    const date = getReportDate(entry);
+    const matchesSearch = !reportsState.search || getReportSearchText(entry).includes(reportsState.search);
+    const matchesStatus = reportsState.status === 'All' || req.status === reportsState.status;
+    const matchesFrom = !reportsState.from || (date && date >= reportsState.from);
+    const matchesTo = !reportsState.to || (date && date <= reportsState.to);
+    return matchesSearch && matchesStatus && matchesFrom && matchesTo;
+  });
+
+  if (resetPage) reportsState.currentPage = 1;
+  reportsState.currentPage = Math.min(Math.max(reportsState.currentPage, 1), getReportsTotalPages());
+}
+
+function getReportsTotalPages() {
+  return Math.max(1, Math.ceil(reportsState.filteredData.length / reportsState.rowsPerPage));
+}
+
+function setReportsPage(page) {
+  reportsState.currentPage = Math.min(Math.max(page, 1), getReportsTotalPages());
+  renderReportsPage();
+}
+
+function getReportsVisibleEntries() {
+  const start = (reportsState.currentPage - 1) * reportsState.rowsPerPage;
+  return reportsState.filteredData.slice(start, start + reportsState.rowsPerPage);
+}
+
+function getReportPageNumbers() {
+  const totalPages = getReportsTotalPages();
+  const maxButtons = 5;
+  let start = Math.max(1, reportsState.currentPage - Math.floor(maxButtons / 2));
+  let end = Math.min(totalPages, start + maxButtons - 1);
+  start = Math.max(1, end - maxButtons + 1);
+  const pages = [];
+  for (let page = start; page <= end; page++) pages.push(page);
+  return pages;
+}
+
+function updateReportsPagination() {
+  const total = reportsState.filteredData.length;
+  const totalPages = getReportsTotalPages();
+  const start = total ? ((reportsState.currentPage - 1) * reportsState.rowsPerPage) + 1 : 0;
+  const end = total ? Math.min(start + reportsState.rowsPerPage - 1, total) : 0;
+  const summary = document.getElementById('reportsPageSummary');
+  const pageNumbers = document.getElementById('reportsPageNumbers');
+  const goTo = document.getElementById('reportsGoToPage');
+
+  if (summary) summary.textContent = `Showing ${start}-${end} of ${total} reports`;
+  if (goTo) {
+    goTo.value = reportsState.currentPage;
+    goTo.max = totalPages;
+  }
+
+  if (pageNumbers) {
+    pageNumbers.innerHTML = '';
+    if (total > 0) {
+      getReportPageNumbers().forEach(page => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'reports-page-btn' + (page === reportsState.currentPage ? ' active' : '');
+        btn.dataset.page = String(page);
+        btn.textContent = String(page);
+        pageNumbers.appendChild(btn);
+      });
+    }
+  }
+
+  document.querySelectorAll('[data-page-action="first"], [data-page-action="prev"]').forEach(btn => {
+    btn.disabled = reportsState.currentPage <= 1 || total === 0;
+  });
+  document.querySelectorAll('[data-page-action="next"], [data-page-action="last"]').forEach(btn => {
+    btn.disabled = reportsState.currentPage >= totalPages || total === 0;
+  });
+}
+
+function renderReportCard(entry) {
+  const req = entry.borrowRequest;
+  const eqList = entry.equipmentList || [];
+  const reqId = req.id;
+  const isAccepted = req.status === 'Accepted';
+  const statusColor = isAccepted ? 'var(--accent)' : 'var(--danger)';
+  const statusBg = isAccepted ? 'var(--accent-soft)' : 'var(--danger-soft)';
+
+  const eqRows = eqList.map(eq => {
+    const returnedVal = eq.returned_on || '';
+    const remarksVal = eq.remarks || '';
+    if (isAccepted) {
+      return `
+        <tr data-eq-name="${escHtml(eq.equipment_name)}">
+          <td style="padding:6px 10px;border-bottom:1px solid var(--border);">${escHtml(eq.equipment_name)}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:center;">${eq.quantity}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:center;">
+            <input type="date" class="return-date-input" value="${escHtml(returnedVal)}"
+              style="font-family:var(--font);font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-1);width:130px;">
+          </td>
+          <td style="padding:6px 10px;border-bottom:1px solid var(--border);">
+            ${buildReturnRemarksControl(remarksVal, eq.quantity)}
+          </td>
+        </tr>`;
+    }
+    return `
+      <tr>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);">${escHtml(eq.equipment_name)}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:center;">${eq.quantity}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:center;">${returnedVal ? formatDateToDDMMYYYY(returnedVal) : '&mdash;'}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid var(--border);">${escHtml(remarksVal || '-')}</td>
+      </tr>`;
+  }).join('');
+
+  const card = document.createElement('div');
+  card.className = 'report-entry';
+  card.dataset.reqId = reqId;
+  card.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+      <div>
+        <span style="font-weight:600;font-size:14px;">${escHtml(req.borrower_name)}</span>
+        <span style="color:var(--text-3);font-size:12px;margin-left:8px;">Guest #${escHtml(req.guest_number)}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="background:${statusBg};color:${statusColor};font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;">${escHtml(req.status)}</span>
+        <button class="downloadPdfBtn" data-req-id="${reqId}"
+          style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">PDF</button>
+        ${isAccepted ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
+          style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">Save Return Info</button>` : ''}
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;font-size:13px;color:var(--text-2);margin-bottom:12px;">
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Student ID</span><br>${escHtml(req.student_id || '-')}</div>
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Instructor</span><br>${escHtml(req.instructor_name || '-')}</div>
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Subject Code</span><br>${escHtml(req.subject_code || '-')}</div>
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Department</span><br>${escHtml(req.department || '-')}</div>
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Room</span><br>${escHtml(req.room || '-')}</div>
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Usage Date</span><br>${formatDateToDDMMYYYY(req.usage_date)}</div>
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Request Date</span><br>${formatDateToDDMMYYYY(req.date)}</div>
+    </div>
+    ${eqRows.length ? `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;" class="report-eq-table">
+      <thead>
+        <tr style="background:var(--surface-2);">
+          <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Equipment</th>
+          <th style="padding:6px 10px;text-align:center;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Qty</th>
+          <th style="padding:6px 10px;text-align:center;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Returned On</th>
+          <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Remarks</th>
+        </tr>
+      </thead>
+      <tbody>${eqRows}</tbody>
+    </table>` : '<div style="font-size:12px;color:var(--text-3);">No equipment listed.</div>'}`;
+
+  return card;
+}
+
+function updateReportsReturnInfo(reqId, returnedItems) {
+  [reportsState.data, reportsState.filteredData].forEach(list => {
+    const entry = list.find(item => item.borrowRequest?.id == reqId);
+    if (!entry) return;
+    returnedItems.forEach(item => {
+      const eq = (entry.equipmentList || []).find(e => e.equipment_name === item.equipment_name);
+      if (eq) {
+        eq.returned_on = item.returned_on;
+        eq.remarks = item.remarks;
+      }
+    });
+  });
+}
+
+function wireReportCardControls(container) {
+  container.querySelectorAll('.return-remarks-select').forEach(select => {
+    select.addEventListener('change', () => {
+      const customInput = select.closest('td')?.querySelector('.return-remarks-other-input');
+      if (!customInput) return;
+      customInput.style.display = select.value === '__other__' ? 'block' : 'none';
+      if (select.value === '__other__') customInput.focus();
+    });
+  });
+
+  container.querySelectorAll('.saveReturnInfoBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const reqId = btn.dataset.reqId;
+      const card = container.querySelector(`.report-entry[data-req-id="${reqId}"]`);
+      if (!card) return;
+
+      const returnedItems = [];
+      card.querySelectorAll('tr[data-eq-name]').forEach(row => {
+        returnedItems.push({
+          equipment_name: row.dataset.eqName,
+          returned_on: row.querySelector('.return-date-input')?.value || '',
+          remarks: getReturnRemarksValue(row)
+        });
+      });
+
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+
+      fetch('update_return_info.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ borrow_request_id: reqId, returned_items: returnedItems })
+      })
+      .then(r => r.json())
+      .then(res => {
+        if (res.success) {
+          updateReportsReturnInfo(reqId, returnedItems);
+          btn.textContent = 'Saved';
+          btn.style.background = 'var(--accent-soft)';
+          btn.style.color = 'var(--accent)';
+          btn.style.borderColor = 'var(--accent)';
+          setTimeout(() => {
+            btn.textContent = 'Save Return Info';
+            btn.style.cssText = '';
+            btn.disabled = false;
+          }, 2000);
+        } else {
+          alert('Save failed: ' + (res.message || 'Unknown error'));
+          btn.disabled = false;
+          btn.textContent = 'Save Return Info';
+        }
+      })
+      .catch(err => {
+        console.error('Save return info error:', err);
+        alert('Network error saving return info.');
+        btn.disabled = false;
+        btn.textContent = 'Save Return Info';
+      });
+    });
+  });
+
+  container.querySelectorAll('.downloadPdfBtn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const reqId = btn.dataset.reqId;
+      const entry = reportsState.data.find(item => item.borrowRequest?.id == reqId);
+      const req = entry?.borrowRequest;
+      const eqList = entry?.equipmentList || [];
+      const card = container.querySelector(`.report-entry[data-req-id="${reqId}"]`);
+      if (!req) return;
+
+      const currentReturnInfo = new Map();
+      card?.querySelectorAll('tr[data-eq-name]').forEach(row => {
+        currentReturnInfo.set(row.dataset.eqName, {
+          returned_on: row.querySelector('.return-date-input')?.value || '',
+          remarks: getReturnRemarksValue(row)
+        });
+      });
+
+      const eqRows = eqList.map(eq => {
+        const liveInfo = currentReturnInfo.get(eq.equipment_name) || {};
+        const returnedOn = liveInfo.returned_on ?? eq.returned_on;
+        const remarks = liveInfo.remarks ?? eq.remarks;
+        return `
+          <tr>
+            <td style="border: 1px solid #000; padding: 8px;">${escHtml(eq.equipment_name)}</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">${eq.quantity}</td>
+            <td style="border: 1px solid #000; padding: 8px; text-align: center;">YES</td>
+            <td style="border: 1px solid #000; padding: 8px;">${returnedOn ? formatDateToDDMMYYYY(returnedOn) : '-'}</td>
+            <td style="border: 1px solid #000; padding: 8px;">${escHtml(remarks || '-')}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const formHtml = `
+        <div style="font-family: Arial, sans-serif; font-size: 12px; padding: 20px; max-width: 800px; margin: 0 auto;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h3 style="margin: 4px 0;">EULOGIO "AMANG" RODRIGUEZ INSTITUTE OF SCIENCE AND TECHNOLOGY</h3>
+            <h3 style="margin: 4px 0;">COLLEGE OF ARTS AND SCIENCES</h3>
+            <h3 style="margin: 4px 0;">APPLIED PHYSICS DEPARTMENT</h3>
+            <h2 style="margin: 10px 0;">Equipment-borrowing Form</h2>
+          </div>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <tr><td style="padding: 5px;"><strong>Guest Login Number:</strong> ${escHtml(req.guest_number)}</td><td style="padding: 5px;"><strong>Date:</strong> ${formatDateToDDMMYYYY(req.date)}</td></tr>
+            <tr><td style="padding: 5px;"><strong>Borrower's Name:</strong> ${escHtml(req.borrower_name)}</td><td style="padding: 5px;"><strong>Instructor's Name:</strong> ${escHtml(req.instructor_name || '-')}</td></tr>
+            <tr><td style="padding: 5px;"><strong>Student ID:</strong> ${escHtml(req.student_id || '-')}</td><td style="padding: 5px;"><strong>Subject Code:</strong> ${escHtml(req.subject_code || '-')}</td></tr>
+            <tr><td style="padding: 5px;"><strong>Department:</strong> ${escHtml(req.department || '-')}</td><td style="padding: 5px;"><strong>Date(s) of Usage:</strong> ${formatDateToDDMMYYYY(req.usage_date)}</td></tr>
+            <tr><td colspan="2" style="padding: 5px;"><strong>Room:</strong> ${escHtml(req.room || '-')}</td></tr>
+          </table>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #000;">
+            <thead>
+              <tr style="background: #f0f0f0;">
+                <th style="border: 1px solid #000; padding: 8px; text-align: left;">Equipment / Material</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Quantity</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: center;">Available in the lab?</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: left;">Returned on</th>
+                <th style="border: 1px solid #000; padding: 8px; text-align: left;">Remarks</th>
+              </tr>
+            </thead>
+            <tbody>${eqRows}</tbody>
+          </table>
+          <div style="margin-bottom: 20px;">
+            <strong>Borrower's Declaration of Commitment:</strong><br/>
+            <em>"I will be accountable to any damage incurred in the equipment and will return the equipment promptly and in the same working condition it was borrowed."</em>
+          </div>
+          <table style="width: 100%; margin-top: 40px;">
+            <tr><td colspan="2" style="padding: 20px; text-align: left; vertical-align: top;">${buildHiromiApprovalBlock(false)}</td></tr>
+          </table>
+        </div>
+      `;
+
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = formHtml;
+      html2pdf().set({
+        margin: [10, 10, 10, 10],
+        filename: `borrow-report-${reqId}.pdf`,
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      }).from(wrapper).save();
+    });
+  });
+}
+
+function renderReportsPage() {
+  const container = document.getElementById('reportsList');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!reportsState.data.length) {
+    container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">No accepted or rejected requests yet.</div>';
+    updateReportsPagination();
+    return;
+  }
+
+  if (!reportsState.filteredData.length) {
+    container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">No reports match the current filters.</div>';
+    updateReportsPagination();
+    return;
+  }
+
+  getReportsVisibleEntries().forEach(entry => {
+    container.appendChild(renderReportCard(entry));
+  });
+
+  wireReportCardControls(container);
+  updateReportsPagination();
+}
+
+function loadReports(options = {}) {
+  const container = document.getElementById('reportsList');
+  if (!container) return;
+  const keepPage = options.keepPage !== false;
+  container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">Loading reports...</div>';
+
+  fetch('fetch_borrow_reports.php')
+    .then(r => r.json())
+    .then(json => {
+      if (!json.success) {
+        reportsState.data = [];
+        reportsState.filteredData = [];
+        renderReportsPage();
+        return;
+      }
+
+      reportsState.data = Array.isArray(json.data) ? json.data : [];
+      applyReportsFilters(!keepPage);
+      renderReportsPage();
+    })
+    .catch(err => {
+      console.error('loadReports error:', err);
+      container.innerHTML = '<div style="color:var(--danger);padding:16px 0;">Failed to load reports.</div>';
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
 
   // ── ADD button ──
   document.getElementById('addEquipmentBtn').onclick = () => {
     selectedItemData = null; canEditQty = true;
     ['equipmentID','equipmentName','serialNumber','internalSN',
-     'accountablePerson','totalQty','workingQty','notWorkingQty','description']
+     'accountablePerson','totalQty','workingQty','notWorkingQty','maintenanceQty','description']
       .forEach(id => { document.getElementById(id).value = ''; });
-    ['equipmentID','totalQty','workingQty','notWorkingQty']
+    const maintenanceInput = document.getElementById('maintenanceQty');
+    if (maintenanceInput) maintenanceInput.value = '0';
+    const borrowingStatus = document.getElementById('borrowingStatus');
+    if (borrowingStatus) borrowingStatus.value = '1';
+    ['equipmentID','totalQty','workingQty','notWorkingQty','maintenanceQty']
       .forEach(id => { document.getElementById(id).disabled = false; });
     openAddEquipmentModal();
+    updateAddEquipmentSaveState();
   };
 
   window.addEventListener('click', function(e) {
@@ -639,6 +2414,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // FIX 2: SUBMIT ADD MODAL — after success, call saveEquipmentLog + loadInventory
+  ['equipmentID','equipmentName','accountablePerson','borrowingStatus','totalQty','workingQty','notWorkingQty','maintenanceQty']
+    .forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('input', updateAddEquipmentSaveState);
+      el.addEventListener('change', updateAddEquipmentSaveState);
+    });
+  updateAddEquipmentSaveState();
+
   document.getElementById('submitEquipmentBtn').onclick = function(e) {
     e.preventDefault();
     const equipmentID       = document.getElementById('equipmentID').value.trim();
@@ -648,20 +2432,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const totalQty          = document.getElementById('totalQty').value.trim();
     const workingQty        = document.getElementById('workingQty').value.trim();
     const notWorkingQty     = document.getElementById('notWorkingQty').value.trim();
+    const maintenanceQty    = document.getElementById('maintenanceQty').value.trim();
     const description       = document.getElementById('description').value.trim();
     const accountablePerson = document.getElementById('accountablePerson').value.trim();
+    const isBorrowable      = document.getElementById('borrowingStatus')?.value || '1';
 
-    if (!equipmentID || !equipmentName || !totalQty || !workingQty || !notWorkingQty || !accountablePerson) {
-      alert('Please fill in all required fields.'); return;
-    }
+    const validation = validateInventoryValues({
+      equipmentID,
+      equipmentName,
+      accountablePerson,
+      totalQty,
+      workingQty,
+      notWorkingQty,
+      maintenanceQty
+    }, true);
+    if (!validation.valid) { alert(validation.message); return; }
     if (currentEquipmentIDs.has(equipmentID)) {
       alert('Equipment ID already exists. Please use a unique ID.'); return;
     }
+    if (!confirmRiskyInventoryUpdate(0, validation.notWorkingQty)) return;
 
     $.ajax({
       url: 'add_equipment.php', method: 'POST',
       data: { equipmentID, equipmentName, serialNumber, internalSN,
-              totalQty, workingQty, notWorkingQty, description, accountablePerson },
+              totalQty, workingQty, notWorkingQty, maintenanceQty, description, accountablePerson, isBorrowable },
       // FIX: removed dataType:'json' to avoid false error triggers
       success: function(rawData) {
         let data;
@@ -669,7 +2463,7 @@ document.addEventListener('DOMContentLoaded', () => {
         catch(e) { data = { success: false, message: 'Invalid response' }; }
 
         if (data.success) {
-          alert('Equipment added successfully!');
+          showInventoryFeedback(buildInventoryUpdateMessage(equipmentName, 0, validation.notWorkingQty));
           closeAddEquipmentModal();
 
           // ── Record to history log with PH timestamp ──
@@ -684,12 +2478,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
           selectedRow = null; selectedItemData = null;
           ['equipmentID','equipmentName','serialNumber','internalSN','totalQty',
-           'workingQty','notWorkingQty','description','accountablePerson']
+           'workingQty','notWorkingQty','maintenanceQty','description','accountablePerson']
             .forEach(id => { document.getElementById(id).value = ''; });
+          const borrowingStatus = document.getElementById('borrowingStatus');
+          if (borrowingStatus) borrowingStatus.value = '1';
 
           // FIX 3: reload inventory immediately so new equipment shows without page refresh
           loadInventory();
           loadInventoryPreview();
+          updateAddEquipmentSaveState();
         } else {
           alert('Error: ' + (data.message || 'Unknown error'));
         }
@@ -745,6 +2542,45 @@ document.addEventListener('DOMContentLoaded', () => {
     _pendingImportFile = file;
     this.value = '';
 
+    openImportWarning(file);
+  });
+
+  function openImportWarning(file) {
+    let modal = document.getElementById('importWarningModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'importWarningModal';
+      modal.style.cssText = 'position:fixed;inset:0;z-index:1250;background:rgba(26,26,24,.55);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box;';
+      modal.innerHTML = `
+        <div style="background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);box-shadow:var(--shadow-md);width:min(460px,100%);padding:22px 24px;">
+          <div style="font-size:16px;font-weight:700;color:var(--text-1);margin-bottom:8px;">Confirm Inventory Import</div>
+          <div id="importWarningFile" style="font-size:12px;color:var(--text-3);margin-bottom:14px;"></div>
+          <div style="border:1px solid #f5c98a;background:var(--warn-soft);color:var(--text-1);border-radius:var(--radius);padding:12px 14px;font-size:13px;line-height:1.45;margin-bottom:18px;">
+            Importing this file will overwrite matching equipment records in the current Inventory List and add any new records from the file. Review the preview carefully before confirming the final import.
+          </div>
+          <div style="display:flex;justify-content:flex-end;gap:10px;">
+            <button id="cancelImportWarningBtn" style="background:var(--surface-2);color:var(--text-2);border:1px solid var(--border);padding:9px 18px;border-radius:var(--radius);font-family:var(--font);font-size:13px;cursor:pointer;">Cancel</button>
+            <button id="continueImportWarningBtn" style="background:var(--accent);color:#fff;border:1px solid var(--accent);padding:9px 18px;border-radius:var(--radius);font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;">Continue Import</button>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+      document.getElementById('cancelImportWarningBtn').addEventListener('click', () => {
+        modal.style.display = 'none';
+        _pendingImportFile = null;
+      });
+      document.getElementById('continueImportWarningBtn').addEventListener('click', () => {
+        modal.style.display = 'none';
+        startImportPreview(_pendingImportFile);
+      });
+    }
+
+    document.getElementById('importWarningFile').textContent = `Selected file: ${file.name}`;
+    modal.style.display = 'flex';
+  }
+
+  function startImportPreview(file) {
+    if (!file) return;
+
     const formData = new FormData();
     formData.append('excelFile', file);
     formData.append('preview', '1');
@@ -777,7 +2613,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('Import preview error:', err);
         alert('Failed to read file:\n' + (err.message || err));
       });
-  });
+  }
 
   function openImportPreview(res, file) {
     const modal = document.getElementById('importPreviewModal');
@@ -785,6 +2621,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const meta  = document.getElementById('importPreviewMeta');
 
     meta.textContent = `File: ${file.name} · ${res.rows.length} row(s) · ${res.new_count} new · ${res.dup_count} duplicate(s)`;
+
+    const restrictedCount = res.rows.filter(row => parseInt(row.is_borrowable ?? 1, 10) !== 1).length;
+    meta.textContent = `File: ${file.name} · ${res.rows.length} row(s) · ${res.new_count} new · ${res.dup_count} duplicate(s) · ${restrictedCount} restricted`;
 
     tbody.innerHTML = '';
     res.rows.forEach(row => {
@@ -801,9 +2640,11 @@ document.addEventListener('DOMContentLoaded', () => {
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);color:var(--text-3);">${escHtml(row.serial_number || '—')}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);color:var(--text-3);">${escHtml(row.internal_sn || '—')}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);">${escHtml(row.account_person || '—')}</td>
+        <td style="padding:7px 12px;border-bottom:1px solid var(--border);">${renderBorrowingStatusBadge(row)}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:center;">${row.total_qty}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:center;color:var(--accent);">${row.working_qty}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:center;color:var(--danger);">${row.not_working_qty}</td>
+        <td style="padding:7px 12px;border-bottom:1px solid var(--border);text-align:center;color:var(--warn);">${row.maintenance_qty || 0}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);color:var(--text-3);font-size:12px;max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
             title="${escHtml(row.description || '')}">${escHtml(row.description || '—')}</td>`;
       tbody.appendChild(tr);
@@ -876,14 +2717,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const kw  = searchInput.value.toLowerCase();
     const map = { equipment:'e', measuring:'m', chemicals:'c', books:'b' };
     document.getElementById('equipmentList').querySelectorAll('tr').forEach(row => {
-      if (!row.cells || row.cells.length < 8) return;
+      if (!row.cells || row.cells.length < 13) return;
       const id   = row.cells[0].textContent.trim();
-      const w    = parseInt(row.cells[6]?.textContent.trim(), 10);
-      const nw   = parseInt(row.cells[7]?.textContent.trim(), 10);
-      const text = row.textContent.toLowerCase();
+      const total = parseInt(row.cells[7]?.querySelector('input')?.value ?? row.cells[7]?.textContent, 10) || 0;
+      const w = parseInt(row.cells[8]?.querySelector('input')?.value ?? row.cells[8]?.textContent, 10) || 0;
+      const nw = parseInt(row.cells[9]?.querySelector('input')?.value ?? row.cells[9]?.textContent, 10) || 0;
+      const m = parseInt(row.cells[10]?.querySelector('input')?.value ?? row.cells[10]?.textContent, 10) || 0;
+      const borrowable = row.dataset.borrowable === '1';
+      const text = getInventoryRowSearchText(row);
       let show   = true;
-      if (fv === 'working')         show = w  > 0;
+      if (fv === 'totalqty')        show = total > 0;
+      else if (fv === 'working')    show = w > 0;
       else if (fv === 'notworking') show = nw > 0;
+      else if (fv === 'maintenance') show = m > 0;
+      else if (fv === 'borrowable') show = borrowable;
+      else if (fv === 'restricted') show = !borrowable;
       else if (fv !== 'all')        show = id.charAt(0).toLowerCase() === map[fv];
       row.style.display = (show && text.includes(kw)) ? '' : 'none';
     });
@@ -916,12 +2764,14 @@ function loadInventory() {
     success: function(data) {
       const items = typeof data === 'string' ? JSON.parse(data) : data;
       currentEquipmentIDs.clear();
+      loadInventoryMetadata(items);
 
       items.forEach(item => {
         currentEquipmentIDs.add(item.equipment_id);
 
         const row = document.createElement('tr');
         row.style.cursor = 'pointer';
+        row.dataset.borrowable = isEquipmentBorrowable(item) ? '1' : '0';
         row.title = 'Click to select, then click Edit — or double-click to edit directly';
         row.innerHTML = `
           <td>${item.equipment_id}</td>
@@ -935,9 +2785,11 @@ function loadInventory() {
           <td>${item.serial_number  ?? ''}</td>
           <td>${item.internal_sn   ?? ''}</td>
           <td>${item.account_person ?? ''}</td>
-          <td>${item.total_qty     ?? 0}</td>
-          <td>${item.working_qty   ?? 0}</td>
-          <td>${item.not_working_qty ?? 0}</td>
+          <td>${renderBorrowingStatusBadge(item)}</td>
+          <td>${renderConditionQtyInput(item, 'total')}</td>
+          <td>${renderConditionQtyInput(item, 'working')}</td>
+          <td>${renderConditionQtyInput(item, 'notWorking')}</td>
+          <td>${renderConditionQtyInput(item, 'maintenance')}</td>
           <td>${item.description   ?? ''}</td>
           <td class="hist-cell">
             <button class="hist-btn" title="View history"
@@ -954,7 +2806,7 @@ function loadInventory() {
 
         // Single click → select row (highlight)
         row.addEventListener('click', function(e) {
-          if (e.target.closest('.hist-btn')) return;
+          if (e.target.closest('.hist-btn') || e.target.closest('.condition-qty-input')) return;
           if (editingRow === row) return;
           if (editingRow && editingRow !== row) { cancelInlineEdit(); return; }
 
@@ -966,7 +2818,7 @@ function loadInventory() {
 
         // Double click → enter inline edit immediately
         row.addEventListener('dblclick', function(e) {
-          if (e.target.closest('.hist-btn')) return;
+          if (e.target.closest('.hist-btn') || e.target.closest('.condition-qty-input')) return;
           if (editingRow && editingRow !== row) cancelInlineEdit();
           enterInlineEdit(row, item);
         });
@@ -979,20 +2831,27 @@ function loadInventory() {
       const kw  = document.getElementById('searchInput')?.value.toLowerCase() || '';
       const map = { equipment:'e', measuring:'m', chemicals:'c', books:'b' };
       container.querySelectorAll('tr').forEach(r => {
-        if (!r.cells || r.cells.length < 9) return;
+        if (!r.cells || r.cells.length < 13) return;
         const id   = r.cells[0].textContent.trim();
-        const w    = parseInt(r.cells[7]?.textContent.trim(), 10);
-        const nw   = parseInt(r.cells[8]?.textContent.trim(), 10);
-        const text = r.textContent.toLowerCase();
+        const total = parseInt(r.cells[7]?.querySelector('input')?.value ?? r.cells[7]?.textContent, 10) || 0;
+        const w = parseInt(r.cells[8]?.querySelector('input')?.value ?? r.cells[8]?.textContent, 10) || 0;
+        const nw = parseInt(r.cells[9]?.querySelector('input')?.value ?? r.cells[9]?.textContent, 10) || 0;
+        const m = parseInt(r.cells[10]?.querySelector('input')?.value ?? r.cells[10]?.textContent, 10) || 0;
+        const borrowable = r.dataset.borrowable === '1';
+        const text = getInventoryRowSearchText(r);
         let show   = true;
-        if (fv === 'working')         show = w  > 0;
+        if (fv === 'totalqty')        show = total > 0;
+        else if (fv === 'working')    show = w > 0;
         else if (fv === 'notworking') show = nw > 0;
+        else if (fv === 'maintenance') show = m > 0;
+        else if (fv === 'borrowable') show = borrowable;
+        else if (fv === 'restricted') show = !borrowable;
         else if (fv !== 'all')        show = id.charAt(0).toLowerCase() === map[fv];
         r.style.display = (show && text.includes(kw)) ? '' : 'none';
       });
     },
     error: function() {
-      container.innerHTML = '<tr><td colspan="11">Error loading inventory</td></tr>';
+      container.innerHTML = '<tr><td colspan="13">Error loading inventory</td></tr>';
     }
   });
 }
@@ -1049,7 +2908,6 @@ function navigateToSection(sectionName) {
   if (sectionName === 'Schedule') {
     if (typeof calendar !== 'undefined' && calendar) calendar.render();
     else if (typeof initCalendar === 'function') initCalendar();
-    initScheduleCharts();
   } else if (sectionName === 'Borrow Requests') {
     loadBorrowRequestsAndUpdateCount();
   } else if (sectionName === 'Inventory') {
@@ -1057,6 +2915,13 @@ function navigateToSection(sectionName) {
     refreshHistTabCount();
   } else if (sectionName === 'Reports') {
     loadReports();
+    moveScheduleSummaryToReports();
+    if (document.getElementById('reportsPanelSummary')?.classList.contains('active')) {
+      initScheduleCharts();
+      setTimeout(() => {
+        if (trendChart && typeof trendChart.resize === 'function') trendChart.resize();
+      }, 80);
+    }
   }
   setActiveSidebarItem(sectionName);
 }
@@ -1381,6 +3246,7 @@ function loadInventoryPreview() {
         <td class="centered-cell">${item.total_qty       ?? 0}</td>
         <td class="centered-cell">${item.working_qty     ?? 0}</td>
         <td class="centered-cell">${item.not_working_qty ?? 0}</td>
+        <td class="centered-cell">${item.maintenance_qty ?? 0}</td>
         <td class="centered-cell">${item.description     ?? ''}</td>`;
       body.appendChild(row);
     });
@@ -1517,7 +3383,8 @@ function loadBorrowRequests() {
               <tr><td><strong>Guest Login Number:</strong> ${request.guest_number}</td><td><strong>Date:</strong> ${formatDateToDDMMYYYY(request.date)}</td></tr>
               <tr><td><strong>Borrower's Name:</strong> ${request.borrower_name}</td><td><strong>Instructor's Name:</strong> ${request.instructor_name}</td></tr>
               <tr><td><strong>Student ID:</strong> ${request.student_id}</td><td><strong>Subject Code:</strong> ${request.subject_code}</td></tr>
-              <tr><td><strong>Date(s) of Usage:</strong> ${formatDateToDDMMYYYY(request.usage_date)}</td><td><strong>Room:</strong> ${request.room}</td></tr>
+              <tr><td><strong>Department:</strong> ${request.department || '—'}</td><td><strong>Date(s) of Usage:</strong> ${formatDateToDDMMYYYY(request.usage_date)}</td></tr>
+              <tr><td colspan="2"><strong>Room:</strong> ${request.room}</td></tr>
               <tr><td colspan="2" style="padding-top:15px;">
                 <table style="width:100%;border-collapse:collapse;" border="1">
                   <thead><tr style="text-align:center;"><th>Equipment / Material</th><th>Quantity</th><th>Available in the lab?</th><th>Returned on</th><th>Remarks</th></tr></thead>
@@ -1529,8 +3396,7 @@ function loadBorrowRequests() {
                 <em>"I will be accountable to any damage incurred in the equipment and will return the equipment promptly and in the same working condition it was borrowed."</em>
               </td></tr>
               <tr>
-                <td style="padding-top:30px;"><p>Approved by:<br><br><div style="width:180px;height:60px;border:1.5px dashed #ccc;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#999;font-size:13px;margin-bottom:8px;background:#fafafa;">e-signature here</div>__________________________<br><em style="display:block;margin-top:4px;">Mr. Hiromi Rivas</em><em style="display:block;">Applied Physics Professor</em></p></td>
-                <td style="text-align:right;padding-top:30px;"><p>_________________________________<br><em>Signature over Printed Name of Borrower</em></p></td>
+                <td colspan="2" style="padding-top:30px;">${buildHiromiApprovalBlock(true)}</td>
               </tr>
             </table>
           </div>
@@ -1586,8 +3452,43 @@ function attachActionHandlers() {
 
 function formatDateToDDMMYYYY(dateStr) {
   if (!dateStr) return '';
+  const parts = String(dateStr).split(/[T\s]/)[0].split('-');
+  if (parts.length === 3) return `${parts[1]}/${parts[2]}/${parts[0]}`;
   const d = new Date(dateStr); if (isNaN(d)) return dateStr;
-  return `${String(d.getDate()).padStart(2,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getFullYear()}`;
+  return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;
+}
+
+function buildReturnRemarksControl(remarksValue, quantity) {
+  const qty = Number(quantity) || 0;
+  const options = ['Good Condition', 'Not Working','Lost','Disposed'];
+  if (qty > 1) options.push('Complete', 'Incomplete');
+
+  const saved = String(remarksValue || '').trim();
+  const selectedStandard = options.find(option => option.toLowerCase() === saved.toLowerCase()) || '';
+  const useOther = saved && !selectedStandard;
+  const optionHtml = [
+    '<option value="">Select remarks</option>',
+    ...options.map(option => `<option value="${escHtml(option)}"${selectedStandard === option ? ' selected' : ''}>${escHtml(option)}</option>`),
+    `<option value="__other__"${useOther ? ' selected' : ''}>Others</option>`
+  ].join('');
+
+  return `
+    <select class="return-remarks-select"
+      style="font-family:var(--font);font-size:12px;padding:4px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-1);width:100%;box-sizing:border-box;">
+      ${optionHtml}
+    </select>
+    <input type="text" class="return-remarks-other-input" value="${useOther ? escHtml(saved) : ''}" placeholder="Enter remarks"
+      style="display:${useOther ? 'block' : 'none'};margin-top:6px;font-family:var(--font);font-size:12px;padding:4px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-1);width:100%;box-sizing:border-box;">
+  `;
+}
+
+function getReturnRemarksValue(row) {
+  const select = row.querySelector('.return-remarks-select');
+  if (!select) return row.querySelector('.return-remarks-input')?.value || '';
+  if (select.value === '__other__') {
+    return row.querySelector('.return-remarks-other-input')?.value.trim() || '';
+  }
+  return select.value || '';
 }
 
 const borrowRequestMap = {};
@@ -1605,6 +3506,9 @@ function addToReports(id, status) {
   .then(r => r.json())
   .then(res => {
     if (!res.success) console.warn('Status update failed:', res.message);
+    if (res.success && document.getElementById('reportsSection')?.style.display !== 'none') {
+      loadReports({ keepPage: true });
+    }
     return res;
   })
   .catch(err => console.error('addToReports error:', err));
@@ -1627,7 +3531,7 @@ function loadBorrowRequestsAndUpdateCount() {
 // ════════════════════════════════════════════════════════════════
 // REPORTS — load accepted / rejected requests with return info editing
 // ════════════════════════════════════════════════════════════════
-function loadReports() {
+function loadReportsLegacy() {
   const container = document.getElementById('reportsList');
   if (!container) return;
   container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">Loading reports…</div>';
@@ -1663,8 +3567,7 @@ function loadReports() {
                   style="font-family:var(--font);font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-1);width:130px;">
               </td>
               <td style="padding:6px 10px;border-bottom:1px solid var(--border);">
-                <input type="text" class="return-remarks-input" value="${escHtml(remarksVal)}" placeholder="e.g. Good condition"
-                  style="font-family:var(--font);font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-1);width:100%;box-sizing:border-box;">
+                ${buildReturnRemarksControl(remarksVal, eq.quantity)}
               </td>
             </tr>`;
           } else {
@@ -1703,6 +3606,7 @@ function loadReports() {
             <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Student ID</span><br>${escHtml(req.student_id || '—')}</div>
             <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Instructor</span><br>${escHtml(req.instructor_name || '—')}</div>
             <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Subject Code</span><br>${escHtml(req.subject_code || '—')}</div>
+            <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Department</span><br>${escHtml(req.department || '—')}</div>
             <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Room</span><br>${escHtml(req.room || '—')}</div>
             <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Usage Date</span><br>${formatDateToDDMMYYYY(req.usage_date)}</div>
             <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Request Date</span><br>${formatDateToDDMMYYYY(req.date)}</div>
@@ -1724,6 +3628,15 @@ function loadReports() {
       });
 
       // ── Wire Save Return Info buttons ──
+      container.querySelectorAll('.return-remarks-select').forEach(select => {
+        select.addEventListener('change', () => {
+          const customInput = select.closest('td')?.querySelector('.return-remarks-other-input');
+          if (!customInput) return;
+          customInput.style.display = select.value === '__other__' ? 'block' : 'none';
+          if (select.value === '__other__') customInput.focus();
+        });
+      });
+
       container.querySelectorAll('.saveReturnInfoBtn').forEach(btn => {
         btn.addEventListener('click', () => {
           const reqId = btn.dataset.reqId;
@@ -1735,7 +3648,7 @@ function loadReports() {
             returnedItems.push({
               equipment_name: row.dataset.eqName,
               returned_on:    row.querySelector('.return-date-input')?.value    || '',
-              remarks:        row.querySelector('.return-remarks-input')?.value || ''
+              remarks:        getReturnRemarksValue(row)
             });
           });
 
@@ -1778,26 +3691,98 @@ function loadReports() {
       container.querySelectorAll('.downloadPdfBtn').forEach(btn => {
         btn.addEventListener('click', () => {
           const reqId = btn.dataset.reqId;
-          const card  = container.querySelector(`.report-entry[data-req-id="${reqId}"]`);
-          if (!card) return;
+          const req = json.data.find(entry => entry.borrowRequest.id == reqId)?.borrowRequest;
+          const eqList = json.data.find(entry => entry.borrowRequest.id == reqId)?.equipmentList || [];
+          const card = container.querySelector(`.report-entry[data-req-id="${reqId}"]`);
+          if (!req) return;
 
-          // Clone card, strip inputs → show values as plain text for PDF
-          const clone = card.cloneNode(true);
-          clone.querySelectorAll('.saveReturnInfoBtn, .downloadPdfBtn').forEach(b => b.remove());
-          clone.querySelectorAll('input.return-date-input').forEach(input => {
-            const span = document.createElement('span');
-            span.textContent = input.value ? formatDateToDDMMYYYY(input.value) : '—';
-            input.replaceWith(span);
+          const currentReturnInfo = new Map();
+          card?.querySelectorAll('tr[data-eq-name]').forEach(row => {
+            currentReturnInfo.set(row.dataset.eqName, {
+              returned_on: row.querySelector('.return-date-input')?.value || '',
+              remarks: getReturnRemarksValue(row)
+            });
           });
-          clone.querySelectorAll('input.return-remarks-input').forEach(input => {
-            const span = document.createElement('span');
-            span.textContent = input.value || '—';
-            input.replaceWith(span);
-          });
+
+          // Build full equipment-borrowing form for PDF
+          const eqRows = eqList.map(eq => {
+            const liveInfo = currentReturnInfo.get(eq.equipment_name) || {};
+            const returnedOn = liveInfo.returned_on ?? eq.returned_on;
+            const remarks = liveInfo.remarks ?? eq.remarks;
+            return `
+              <tr>
+                <td style="border: 1px solid #000; padding: 8px;">${escHtml(eq.equipment_name)}</td>
+                <td style="border: 1px solid #000; padding: 8px; text-align: center;">${eq.quantity}</td>
+                <td style="border: 1px solid #000; padding: 8px; text-align: center;">YES</td>
+                <td style="border: 1px solid #000; padding: 8px;">${returnedOn ? formatDateToDDMMYYYY(returnedOn) : '—'}</td>
+                <td style="border: 1px solid #000; padding: 8px;">${escHtml(remarks || '—')}</td>
+              </tr>
+            `;
+          }).join('');
+
+          const formHtml = `
+            <div style="font-family: Arial, sans-serif; font-size: 12px; padding: 20px; max-width: 800px; margin: 0 auto;">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <h3 style="margin: 4px 0;">EULOGIO "AMANG" RODRIGUEZ INSTITUTE OF SCIENCE AND TECHNOLOGY</h3>
+                <h3 style="margin: 4px 0;">COLLEGE OF ARTS AND SCIENCES</h3>
+                <h3 style="margin: 4px 0;">APPLIED PHYSICS DEPARTMENT</h3>
+                <h2 style="margin: 10px 0;">Equipment-borrowing Form</h2>
+              </div>
+
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                <tr>
+                  <td style="padding: 5px;"><strong>Guest Login Number:</strong> ${escHtml(req.guest_number)}</td>
+                  <td style="padding: 5px;"><strong>Date:</strong> ${formatDateToDDMMYYYY(req.date)}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px;"><strong>Borrower's Name:</strong> ${escHtml(req.borrower_name)}</td>
+                  <td style="padding: 5px;"><strong>Instructor's Name:</strong> ${escHtml(req.instructor_name || '—')}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px;"><strong>Student ID:</strong> ${escHtml(req.student_id || '—')}</td>
+                  <td style="padding: 5px;"><strong>Subject Code:</strong> ${escHtml(req.subject_code || '—')}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px;"><strong>Department:</strong> ${escHtml(req.department || '—')}</td>
+                  <td style="padding: 5px;"><strong>Date(s) of Usage:</strong> ${formatDateToDDMMYYYY(req.usage_date)}</td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="padding: 5px;"><strong>Room:</strong> ${escHtml(req.room || '—')}</td>
+                </tr>
+              </table>
+
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #000;">
+                <thead>
+                  <tr style="background: #f0f0f0;">
+                    <th style="border: 1px solid #000; padding: 8px; text-align: left;">Equipment / Material</th>
+                    <th style="border: 1px solid #000; padding: 8px; text-align: center;">Quantity</th>
+                    <th style="border: 1px solid #000; padding: 8px; text-align: center;">Available in the lab?</th>
+                    <th style="border: 1px solid #000; padding: 8px; text-align: left;">Returned on</th>
+                    <th style="border: 1px solid #000; padding: 8px; text-align: left;">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${eqRows}
+                </tbody>
+              </table>
+
+              <div style="margin-bottom: 20px;">
+                <strong>Borrower's Declaration of Commitment:</strong><br/>
+                <em>"I will be accountable to any damage incurred in the equipment and will return the equipment promptly and in the same working condition it was borrowed."</em>
+              </div>
+
+              <table style="width: 100%; margin-top: 40px;">
+                <tr>
+                  <td colspan="2" style="padding: 20px; text-align: left; vertical-align: top;">
+                    ${buildHiromiApprovalBlock(false)}
+                  </td>
+                </tr>
+              </table>
+            </div>
+          `;
 
           const wrapper = document.createElement('div');
-          wrapper.style.cssText = 'padding:24px;font-family:sans-serif;font-size:13px;color:#111;';
-          wrapper.appendChild(clone);
+          wrapper.innerHTML = formHtml;
 
           html2pdf().set({
             margin:      [10, 10, 10, 10],

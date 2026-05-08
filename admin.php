@@ -301,6 +301,89 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
     }
     .snap-val { color: var(--text-1); padding: 2px 0; }
 
+    .condition-qty-input {
+      width: 64px;
+      text-align: center;
+      padding: 5px 6px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--text-1);
+      font-family: var(--font);
+      font-size: 12px;
+      outline: none;
+      transition: border-color .15s, background .15s, box-shadow .15s;
+    }
+    .condition-qty-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-soft);
+    }
+    .condition-qty-input.condition-w { color: var(--accent); }
+    .condition-qty-input.condition-nw { color: var(--danger); }
+    .condition-qty-input.condition-m { color: var(--warn); }
+    .condition-qty-input:disabled {
+      background: var(--surface-2);
+      color: var(--text-3);
+      cursor: not-allowed;
+    }
+
+    .inventory-meta-panel {
+      display: flex;
+      align-items: stretch;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .inventory-meta-group,
+    .equipment-id-legend {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 9px 12px;
+    }
+    .inventory-meta-item {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+      padding-right: 10px;
+      border-right: 1px solid var(--border);
+    }
+    .inventory-meta-item:last-child {
+      border-right: none;
+      padding-right: 0;
+    }
+    .inventory-meta-label,
+    .equipment-id-legend .legend-label {
+      color: var(--text-3);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .inventory-meta-item strong,
+    .equipment-id-legend span:not(.legend-label) {
+      color: var(--text-1);
+      font-size: 12px;
+    }
+    .equipment-id-legend strong {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      margin-right: 4px;
+      border-radius: 6px;
+      background: var(--surface-2);
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+
     @keyframes slideUpBar {
       from { opacity:0; transform:translateY(12px); }
       to   { opacity:1; transform:none; }
@@ -428,7 +511,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
             <div class="inventory-preview-container" style="margin-top:12px;">
               <table class="preview-table">
                 <thead>
-                  <tr><th>ID</th><th>Equipment</th><th>SN</th><th>ISN</th><th>Acc Person</th><th>T</th><th>W</th><th>NW</th><th>Desc</th></tr>
+                  <tr><th>ID</th><th>Equipment</th><th>SN</th><th>ISN</th><th>Acc Person</th><th title="Total">T</th><th title="Working">W</th><th title="Not Working">NW</th><th title="Maintenance">M</th><th>Desc</th></tr>
                 </thead>
                 <tbody id="inventoryPreviewBody"></tbody>
               </table>
@@ -469,6 +552,12 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
           History
           <span class="tab-count" id="histTabCount">—</span>
         </button>
+        <button class="inv-tab-btn" id="invTabAuditBtn" onclick="switchInvTab('audit')">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M9 12l2 2 4-4M7 20h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v13a2 2 0 002 2z"/>
+          </svg>
+          Inventory Audit
+        </button>
       </div>
 
       <!-- ── TAB: INVENTORY LIST ── -->
@@ -484,8 +573,14 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
               <option value="books">Books</option>
             </optgroup>
             <optgroup label="Condition">
+              <option value="totalQty">Total</option>
               <option value="working">Working</option>
-              <option value="notWorking">Not Working</option>
+              <option value="notWorking">Non-working</option>
+              <option value="maintenance">Maintenance</option>
+            </optgroup>
+            <optgroup label="Borrowing Visibility">
+              <option value="borrowable">Available for Borrowing</option>
+              <option value="restricted">Restricted / Hidden</option>
             </optgroup>
           </select>
           <div class="search-bar">
@@ -519,7 +614,27 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
           <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;">
             <circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>
           </svg>
-          <span>Click any row to select it, then click <strong>Edit</strong> to edit inline. The <strong>🕐</strong> button on each row shows that equipment's change history.</span>
+          <span>Click any row to select it, then click <strong>Edit</strong> to edit equipment details. Admins can update <strong>T / W / NW / M</strong> quantities directly in the Condition columns. The <strong>🕐</strong> button on each row shows that equipment's change history.</span>
+        </div>
+
+        <div class="inventory-meta-panel">
+          <div class="inventory-meta-group">
+            <div class="inventory-meta-item">
+              <span class="inventory-meta-label">Last Imported</span>
+              <strong id="inventoryLastImported">Never</strong>
+            </div>
+            <div class="inventory-meta-item">
+              <span class="inventory-meta-label">Last Edited</span>
+              <strong id="inventoryLastEdited">Never</strong>
+            </div>
+          </div>
+          <div class="equipment-id-legend" aria-label="Equipment ID prefix legend">
+            <span class="legend-label">Equipment ID Prefix</span>
+            <span><strong>E</strong> Equipment</span>
+            <span><strong>M</strong> Measuring Tools</span>
+            <span><strong>C</strong> Chemicals</span>
+            <span><strong>B</strong> Books</span>
+          </div>
         </div>
 
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow);">
@@ -532,7 +647,8 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
                 <th rowspan="2">SN</th>
                 <th rowspan="2">ISN</th>
                 <th rowspan="2">Acc Person</th>
-                <th colspan="3">Condition</th>
+                <th rowspan="2">Visibility</th>
+                <th colspan="4">Condition</th>
                 <th rowspan="2">Description</th>
                 <th rowspan="2" style="width:44px;text-align:center;">Log</th>
               </tr>
@@ -540,6 +656,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
                 <th title="Total">T</th>
                 <th title="Working">W</th>
                 <th title="Not Working">NW</th>
+                <th title="Maintenance">M</th>
               </tr>
             </thead>
             <tbody id="equipmentList"></tbody>
@@ -584,7 +701,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
                 <th>#</th>
                 <th>Equipment Name</th>
                 <th>Equipment ID</th>
-                <th>Qty&nbsp;<span style="font-weight:400;color:var(--text-3);">(T / W / NW)</span></th>
+                <th>Qty&nbsp;<span style="font-weight:400;color:var(--text-3);">(T / W / NW / M)</span></th>
                 <th>Accountable Person</th>
                 <th>Action</th>
                 <th>Added By</th>
@@ -598,6 +715,182 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
         </div>
 
       </div><!-- /invPanelHistory -->
+
+      <!-- ── TAB: INVENTORY AUDIT ── -->
+      <div class="inv-tab-panel" id="invPanelAudit">
+
+        <!-- Summary Section -->
+        <div class="card" style="margin-bottom:24px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px;">
+            <div>
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:6px;">Last Audit Date</div>
+              <div style="font-size:18px;font-weight:600;color:var(--text-1);" id="lastAuditDate">Never</div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:6px;">Next Scheduled (6 months)</div>
+              <div style="font-size:18px;font-weight:600;color:var(--accent);" id="nextScheduledDate">—</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button onclick="openStartAuditModal()" style="background:var(--accent);color:#fff;border-color:var(--accent);padding:10px 18px;font-weight:600;">+ Start New Audit</button>
+            <button onclick="showAuditPastAudits()" style="background:var(--surface-2);padding:10px 18px;">View Past Audits</button>
+          </div>
+        </div>
+
+        <!-- Condition Legend -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px;flex-wrap:wrap;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;font-size:11px;color:var(--text-2);">
+          <strong style="color:var(--text-1);">Condition Legend:</strong>
+          <span title="Total equipment count" style="display:inline-flex;align-items:center;gap:4px;"><strong>T</strong> = Total</span>
+          <span title="Operational equipment" style="display:inline-flex;align-items:center;gap:4px;"><strong>W</strong> = Working</span>
+          <span title="Broken or defective equipment" style="display:inline-flex;align-items:center;gap:4px;"><strong>NW</strong> = Not-working</span>
+          <span title="Equipment being serviced" style="display:inline-flex;align-items:center;gap:4px;"><strong>M</strong> = Maintenance</span>
+        </div>
+
+        <!-- Audit Interface (initially hidden) -->
+        <div id="auditChecklistSection" style="display:none;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+            <div style="font-size:14px;font-weight:600;color:var(--text-1);">
+              Current Audit: <span id="auditDateDisplay">—</span>
+            </div>
+            <button onclick="closeAuditInterface()" style="background:var(--surface-2);padding:6px 12px;font-size:12px;">✕ Close</button>
+          </div>
+
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;font-size:11px;color:var(--text-2);">
+            <strong style="color:var(--text-1);">Condition Legend:</strong>
+            <span title="Total" style="display:inline-flex;align-items:center;gap:4px;"><strong>T</strong> = Total</span>
+            <span title="Working" style="display:inline-flex;align-items:center;gap:4px;"><strong>W</strong> = Working</span>
+            <span title="Not-working" style="display:inline-flex;align-items:center;gap:4px;"><strong>NW</strong> = Not-working</span>
+            <span title="Maintenance" style="display:inline-flex;align-items:center;gap:4px;"><strong>M</strong> = Maintenance</span>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+            <div class="search-bar" style="flex:1;min-width:200px;">
+              <input type="text" placeholder="Search equipment…" id="auditSearchInput" onkeyup="filterAuditItems()">
+            </div>
+            <select id="auditStatusFilter" onchange="filterAuditItems()" style="font-family:var(--font);font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text-1);outline:none;">
+              <option value="All">All Items</option>
+              <option value="Complete">Complete</option>
+              <option value="Missing">Missing</option>
+              <option value="Damaged">Damaged</option>
+            </select>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-bottom:12px;font-size:12px;flex-wrap:wrap;">
+            <span style="padding:6px 12px;background:var(--bg);border-radius:var(--radius);color:var(--text-2);">
+              <strong id="auditCountAll">0</strong> All
+            </span>
+            <span style="padding:6px 12px;background:var(--bg);border-radius:var(--radius);color:var(--accent);">
+              <strong id="auditCountComplete">0</strong> Complete
+            </span>
+            <span style="padding:6px 12px;background:var(--bg);border-radius:var(--radius);color:var(--danger);">
+              <strong id="auditCountMissing">0</strong> Missing
+            </span>
+            <span style="padding:6px 12px;background:var(--bg);border-radius:var(--radius);color:var(--warn);">
+              <strong id="auditCountDamaged">0</strong> Damaged
+            </span>
+          </div>
+
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow);margin-bottom:16px;">
+            <div style="max-height:600px;overflow-y:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:13px;" id="auditChecklistTable">
+                <thead style="position:sticky;top:0;background:var(--surface-2);z-index:1;">
+                  <tr>
+                    <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);">Equipment Name</th>
+                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:150px;">Previous<br><span style="font-weight:400;"><span title="Total">T</span> / <span title="Working">W</span> / <span title="Not Working">NW</span> / <span title="Maintenance">M</span></span></th>
+                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:250px;">New<br><span style="font-weight:400;"><span title="Total">T</span> / <span title="Working">W</span> / <span title="Not Working">NW</span> / <span title="Maintenance">M</span></span></th>
+                    <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:140px;">Status</th>
+                    <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);">Damage Notes</th>
+                  </tr>
+                </thead>
+                <tbody id="auditItemsBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
+            <button onclick="saveDraftAudit()" style="background:var(--surface-2);padding:10px 18px;font-weight:600;">↙ Save Draft</button>
+            <button onclick="submitAudit()" style="background:var(--accent);color:#fff;border-color:var(--accent);padding:10px 18px;font-weight:600;">Submit Audit →</button>
+          </div>
+        </div>
+
+        <!-- Audit Summary (shown after submit) -->
+        <div id="auditSummarySection" style="display:none;">
+          <div class="card" style="text-align:center;margin-bottom:24px;">
+            <h2 style="font-size:18px;font-weight:600;margin-bottom:16px;color:var(--text-1);">Audit Results</h2>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+              <div style="background:var(--bg);padding:16px;border-radius:var(--radius);">
+                <div style="font-size:24px;font-weight:600;color:var(--text-1);" id="summaryTotal">0</div>
+                <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Total Items</div>
+              </div>
+              <div style="background:var(--accent-soft);padding:16px;border-radius:var(--radius);">
+                <div style="font-size:24px;font-weight:600;color:var(--accent);" id="summaryComplete">0</div>
+                <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Complete</div>
+              </div>
+              <div style="background:#FDECEA;padding:16px;border-radius:var(--radius);">
+                <div style="font-size:24px;font-weight:600;color:var(--danger);" id="summaryMissing">0</div>
+                <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Missing</div>
+              </div>
+              <div style="background:var(--warn-soft);padding:16px;border-radius:var(--radius);">
+                <div style="font-size:24px;font-weight:600;color:var(--warn);" id="summaryDamaged">0</div>
+                <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Damaged</div>
+              </div>
+            </div>
+            <input type="hidden" id="currentAuditIdStorage" value="">
+            <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px;">
+              <button onclick="importAuditToInventory(document.getElementById('currentAuditIdStorage').value)" style="background:var(--accent);color:#fff;border:1px solid var(--accent);padding:10px 18px;font-weight:600;border-radius:var(--radius);cursor:pointer;">📥 Import Results to Inventory</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Past Audits Table -->
+        <div id="pastAuditsSection" style="display:none;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+            <h2 style="font-size:15px;font-weight:600;margin:0;color:var(--text-1);">Audit History</h2>
+            <button onclick="resetToAuditSummary()" style="background:var(--surface-2);padding:6px 12px;font-size:12px;">← Back</button>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow);">
+            <div style="max-height:600px;overflow-y:auto;">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;" id="pastAuditsTable">
+                <thead style="position:sticky;top:0;background:var(--surface-2);z-index:1;">
+                  <tr>
+                    <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);">Date</th>
+                    <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);">Admin</th>
+                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:80px;">Complete</th>
+                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:80px;">Missing</th>
+                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:80px;">Damaged</th>
+                    <th style="padding:10px 12px;text-align:center;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);width:60px;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="pastAuditsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Most Borrowed Equipment Panel -->
+        <div id="mostBorrowedSection" style="margin-top:24px;">
+          <div class="card">
+            <h2 style="font-size:15px;font-weight:600;margin-bottom:12px;color:var(--text-1);">Most Borrowed Equipment</h2>
+            <p style="font-size:12px;color:var(--text-3);margin-bottom:12px;">Based on last 6 months of borrowing requests</p>
+            <div style="max-height:320px;overflow-y:auto;">
+              <table style="width:100%;font-size:12px;" id="mostBorrowedTable">
+                <thead>
+                  <tr style="background:var(--bg);">
+                    <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:40px;">Rank</th>
+                    <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:600;color:var(--text-3);">Equipment</th>
+                    <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:120px;">Times Borrowed</th>
+                    <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:100px;">Total Qty</th>
+                  </tr>
+                </thead>
+                <tbody id="mostBorrowedBody">
+                  <tr><td colspan="4" style="padding:16px;text-align:center;color:var(--text-3);">Loading…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /invPanelAudit -->
 
     </div><!-- /inventorySection -->
 
@@ -680,7 +973,64 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
     <!-- ═══════════════════ REPORTS ═══════════════════ -->
     <div id="reportsSection" style="display:none;">
       <div class="page-header"><h1>Reports</h1></div>
-      <div id="reportsList" style="display:flex;flex-direction:column;gap:10px;"></div>
+      <div class="inv-tab-row">
+        <button class="inv-tab-btn active" id="reportsTabListBtn" onclick="switchReportsTab('list')">Report Entries</button>
+        <button class="inv-tab-btn" id="reportsTabSummaryBtn" onclick="switchReportsTab('summary')">Summary</button>
+      </div>
+
+      <div class="inv-tab-panel active" id="reportsPanelList">
+        <div class="reports-filter-row">
+          <div class="reports-search-field">
+            <label for="reportsSearch">Search</label>
+            <input type="search" id="reportsSearch" placeholder="Borrower, guest, instructor, room">
+          </div>
+          <div>
+            <label for="reportsStatusFilter">Status</label>
+            <select id="reportsStatusFilter">
+              <option value="All">All</option>
+              <option value="Accepted">Accepted</option>
+              <option value="Rejected">Rejected</option>
+            </select>
+          </div>
+          <div>
+            <label for="reportsFrom">From</label>
+            <input type="date" id="reportsFrom">
+          </div>
+          <div>
+            <label for="reportsTo">To</label>
+            <input type="date" id="reportsTo">
+          </div>
+          <button id="reportsFilterBtn" class="primary">Filter</button>
+          <button id="reportsClearBtn">Clear</button>
+        </div>
+
+        <div id="reportsList" style="display:flex;flex-direction:column;gap:10px;"></div>
+
+        <div class="reports-pagination" id="reportsPagination">
+          <div class="reports-page-summary" id="reportsPageSummary">Showing 0-0 of 0 reports</div>
+          <div class="reports-page-controls">
+            <button type="button" class="reports-page-btn" data-page-action="first">&lt;&lt;</button>
+            <button type="button" class="reports-page-btn" data-page-action="prev">&lt;</button>
+            <div class="reports-page-numbers" id="reportsPageNumbers"></div>
+            <button type="button" class="reports-page-btn" data-page-action="next">&gt;</button>
+            <button type="button" class="reports-page-btn" data-page-action="last">&gt;&gt;</button>
+          </div>
+          <div class="reports-page-options">
+            <label for="reportsGoToPage">Go to</label>
+            <input type="number" id="reportsGoToPage" min="1" value="1">
+            <label for="reportsRowsPerPage">Rows</label>
+            <select id="reportsRowsPerPage">
+              <option value="10">10</option>
+              <option value="15">15</option>
+              <option value="25">25</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="inv-tab-panel" id="reportsPanelSummary">
+        <div id="reportsSummaryMount"></div>
+      </div>
     </div>
 
   </div><!-- /main-content -->
@@ -700,10 +1050,16 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
       </div>
       <label>Accountable Person</label>
       <input type="text" id="accountablePerson" />
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+      <label>Borrowing Visibility</label>
+      <select id="borrowingStatus">
+        <option value="1">Available for Borrowing</option>
+        <option value="0">Restricted / Hidden from Guest Side</option>
+      </select>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
         <div><label>Total Qty</label><input type="number" id="totalQty" /></div>
         <div><label>Working</label><input type="number" id="workingQty" /></div>
         <div><label>Not Working</label><input type="number" id="notWorkingQty" /></div>
+        <div><label>Maintenance</label><input type="number" id="maintenanceQty" /></div>
       </div>
       <label>Description</label>
       <textarea id="description"></textarea>
@@ -744,7 +1100,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
           <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--accent-soft);border:1px solid #a8d5b5;"></span> New — will be imported
         </span>
         <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);">
-          <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--warn-soft);border:1px solid #f5c98a;"></span> Duplicate — will be skipped
+          <span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--warn-soft);border:1px solid #f5c98a;"></span> Duplicate — matching inventory row will be overwritten
         </span>
       </div>
 
@@ -759,9 +1115,11 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
               <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">SN</th>
               <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">ISN</th>
               <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Acc. Person</th>
+              <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Visibility</th>
               <th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Total</th>
               <th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">W</th>
               <th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">NW</th>
+              <th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">M</th>
               <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Description</th>
             </tr>
           </thead>
@@ -777,6 +1135,6 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
     </div>
   </div>
 
-  <script src="admin.js"></script>
+  <script src="admin.js?v=20260507a"></script>
 </body>
 </html>

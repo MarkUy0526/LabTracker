@@ -1,7 +1,11 @@
 <?php
 include 'db.php';
+require 'equipment_condition_helpers.php';
 
-$sql    = "SELECT equipment_id, equipment_name, serial_number, internal_sn, account_person, total_qty, working_qty, not_working_qty, description FROM equipment";
+ensureEquipmentMaintenanceColumn($conn);
+ensureEquipmentInventoryControlColumns($conn);
+
+$sql    = "SELECT equipment_id, equipment_name, serial_number, internal_sn, account_person, total_qty, working_qty, not_working_qty, maintenance_qty, is_borrowable, description, last_imported_at, last_edited_at FROM equipment";
 $result = $conn->query($sql);
 
 if (!$result) {
@@ -16,7 +20,7 @@ header('Cache-Control: max-age=0');
 $out = fopen('php://output', 'w');
 
 // Header row — same column order as xlsx export
-fputcsv($out, ['Equipment ID', 'Equipment', 'SN', 'ISN', 'ACC Person', 'T', 'W', 'NW', 'Description']);
+fputcsv($out, ['Equipment ID', 'Equipment', 'SN', 'ISN', 'ACC Person', 'T', 'W', 'NW', 'M', 'Borrowing Status', 'Description', 'Last Imported', 'Last Edited']);
 
 while ($row = $result->fetch_assoc()) {
     fputcsv($out, [
@@ -28,7 +32,11 @@ while ($row = $result->fetch_assoc()) {
         $row['total_qty'],
         $row['working_qty'],
         $row['not_working_qty'],
+        $row['maintenance_qty'],
+        ((int) ($row['is_borrowable'] ?? 1) === 1) ? 'Available for Borrowing' : 'Restricted / Hidden from Guest Side',
         $row['description'],
+        $row['last_imported_at'],
+        $row['last_edited_at'],
     ]);
 }
 

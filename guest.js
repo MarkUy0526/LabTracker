@@ -1,5 +1,96 @@
 let allEquipmentData  = [];
 let selectedEquipment = [];
+let hiromiSignatureUrl = '';
+let hiromiSignatureVersion = Date.now();
+
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function getHiromiSignatureSrc() {
+    if (!hiromiSignatureUrl) return '';
+    const joiner = hiromiSignatureUrl.includes('?') ? '&' : '?';
+    return `${hiromiSignatureUrl}${joiner}v=${hiromiSignatureVersion}`;
+}
+
+function buildHiromiSignatureImage() {
+    const src = getHiromiSignatureSrc();
+    if (src) {
+        return `<img src="${escapeHtml(src)}" alt="Mr. Hiromi Rivas e-signature" style="display:block;width:180px;height:60px;object-fit:contain;margin:8px 0;">`;
+    }
+    return `<div style="width:180px;height:60px;border:1.5px dashed #bbb;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#777;font-size:12px;margin:8px 0;background:#fafafa;">e-signature here</div>`;
+}
+
+function refreshHiromiSignatureSlots() {
+    document.querySelectorAll('.hiromi-esig-slot').forEach(slot => {
+        slot.innerHTML = buildHiromiSignatureImage();
+    });
+}
+
+function loadHiromiSignature() {
+    return fetch('get_esignature.php')
+        .then(r => r.json())
+        .then(res => {
+            if (res.success && res.url) {
+                hiromiSignatureUrl = res.url;
+                hiromiSignatureVersion = Date.now();
+            }
+            refreshHiromiSignatureSlots();
+            return res;
+        })
+        .catch(() => refreshHiromiSignatureSlots());
+}
+
+// ════════════════════════════════════════════════════════════════
+// REAL-TIME REQUIRED FIELD INDICATOR (asterisk visibility)
+// ════════════════════════════════════════════════════════════════
+function initializeRequiredIndicators() {
+    const fieldConfigs = [
+        { inputs: ['lastName', 'firstName', 'middleInitial'], indicator: 'borrowerRequired' },
+        { inputs: ['studentID'], indicator: 'studentIdRequired' },
+        { inputs: ['subjectCode'], indicator: 'subjectCodeRequired' },
+        { inputs: ['usageDate'], indicator: 'usageDateRequired' },
+        { inputs: ['departmentSelect'], indicator: 'departmentRequired' },
+        { inputs: ['roomSelect', 'roomCustomInput'], indicator: 'roomRequired' },
+        { inputs: ['instructorName', 'instructorCustomInput'], indicator: 'instructorRequired' }
+    ];
+
+    function updateIndicator(config) {
+        const indicator = document.getElementById(config.indicator);
+        if (!indicator) return;
+
+        const allFilled = config.inputs.every(inputId => {
+            const element = document.getElementById(inputId);
+            if (!element) return true;
+            const value = element.value ? element.value.trim() : '';
+            const isHidden = element.classList && element.classList.contains('hidden-input');
+            return (value.length > 0) || isHidden;
+        });
+
+        if (allFilled && config.inputs.some(id => document.getElementById(id)?.value?.trim())) {
+            indicator.classList.add('hidden');
+        } else {
+            indicator.classList.remove('hidden');
+        }
+    }
+
+    fieldConfigs.forEach(config => {
+        config.inputs.forEach(inputId => {
+            const element = document.getElementById(inputId);
+            if (element) {
+                element.addEventListener('input', () => updateIndicator(config));
+                element.addEventListener('change', () => updateIndicator(config));
+            }
+        });
+    });
+
+    // Initial check
+    fieldConfigs.forEach(updateIndicator);
+}
 
 // ════════════════════════════════════════════════
 // RULES MODAL — 2-slide, scroll-to-reveal agree
@@ -128,12 +219,23 @@ function openReviewModal() {
     const studentID   = document.getElementById('studentID').value.trim();
     const subjectCode = document.getElementById('subjectCode').value.trim();
     const usageDate   = document.getElementById('usageDate').value;
-    const room        = document.getElementById('roomSelect').value;
-    const instructor  = document.getElementById('instructorName').value;
+    const department  = document.getElementById('departmentSelect').value;
+    const roomCustom  = document.getElementById('roomCustomInput');
+    const roomSelect  = document.getElementById('roomSelect');
+    // Get room value from either custom input or select
+    const room = (roomCustom && roomCustom.classList.contains('show'))
+        ? roomCustom.value.trim()
+        : roomSelect.value;
+    const instructorCustom = document.getElementById('instructorCustomInput');
+    const instructorSelect = document.getElementById('instructorName');
+    // Get instructor value from either custom input or select
+    const instructor = (instructorCustom && instructorCustom.classList.contains('show'))
+        ? instructorCustom.value.trim()
+        : instructorSelect.value;
     const hasEquip    = $('#equipmentListInForm tr').length > 0;
 
-    if (!studentID || !subjectCode || !usageDate || !room || !instructor) {
-        alert('Please fill out all fields before continuing, including selecting a room and instructor.');
+    if (!studentID || !subjectCode || !usageDate || !department || !room || !instructor) {
+        alert('Please fill out all fields before continuing, including selecting a department, room and instructor.');
         return;
     }
     if (!hasEquip) {
@@ -148,11 +250,12 @@ function openReviewModal() {
     document.getElementById('rv-instructor').textContent = instructor;
     document.getElementById('rv-student-id').textContent = studentID;
     document.getElementById('rv-subject').textContent    = subjectCode;
+    document.getElementById('rv-department').textContent = department;
     document.getElementById('rv-room').textContent       = room;
 
     const uParts = usageDate.split('-');
     document.getElementById('rv-usage-date').textContent =
-        uParts.length === 3 ? `${uParts[2]}-${uParts[1]}-${uParts[0]}` : usageDate;
+        uParts.length === 3 ? `${uParts[1]}/${uParts[2]}/${uParts[0]}` : usageDate;
 
     // Equipment rows
     const tbody = document.getElementById('rv-equipment-list');
@@ -192,6 +295,7 @@ function closeReviewModal() {
 // INIT
 // ════════════════════════════════════════════════
 $(document).ready(function () {
+    loadHiromiSignature();
     getGuestNumber();
     setCurrentDate();
     fetchEquipment();
@@ -267,7 +371,7 @@ function setCurrentDate() {
     const d  = String(today.getDate()).padStart(2, '0');
     const m  = String(today.getMonth() + 1).padStart(2, '0');
     const y  = today.getFullYear();
-    $('#borrowDate').text(`${d}-${m}-${y}`);
+    $('#borrowDate').text(`${m}/${d}/${y}`);
     $('#borrowDateForDB').val(`${y}-${m}-${d}`);
 }
 
@@ -483,15 +587,27 @@ function submitBorrowRequest() {
 
     if (confirmNum !== guestNum) { alert('Guest number does not match.'); return; }
 
+    const roomCustom = document.getElementById('roomCustomInput');
+    const roomSelect = document.getElementById('roomSelect');
+    const instructorCustom = document.getElementById('instructorCustomInput');
+    const instructorSelect = document.getElementById('instructorName');
+    const room = (roomCustom && roomCustom.classList.contains('show'))
+        ? roomCustom.value.trim()
+        : roomSelect.value;
+    const instructor = (instructorCustom && instructorCustom.classList.contains('show'))
+        ? instructorCustom.value.trim()
+        : instructorSelect.value;
+
     const data = {
         guestNumber:    guestNum,
         date:           $('#borrowDateForDB').val(),
         borrowerName:   $('#borrowerName').val(),
-        instructorName: $('#instructorName').val(),
+        instructorName: instructor,
         studentID:      $('#studentID').val(),
         subjectCode:    $('#subjectCode').val(),
         usageDate:      $('#usageDate').val(),
-        room:           $('#roomSelect').val(),
+        department:     $('#departmentSelect').val(),
+        room:           room,
         equipmentList:  []
     };
 
@@ -527,8 +643,11 @@ function showFinalConfirmationModal(data) {
     const orig = document.getElementById('borrowerForm');
     if (!orig) return;
     const clone = orig.cloneNode(true);
+    try { clone.querySelector('#departmentSelect').value = data.department || ''; } catch(e) {}
     try { clone.querySelector('#instructorName').value = data.instructorName || ''; } catch(e) {}
     try { clone.querySelector('#roomSelect').value     = data.room || ''; } catch(e) {}
+    try { clone.querySelector('#instructorCustomInput').value = data.instructorName || ''; } catch(e) {}
+    try { clone.querySelector('#roomCustomInput').value       = data.room || ''; } catch(e) {}
     clone.querySelectorAll('input, select, textarea, button').forEach(el => {
         el.disabled = true; el.readOnly = true;
         if (el.type === 'submit' || el.type === 'button') el.style.display = 'none';
@@ -562,3 +681,180 @@ function showEquipment() {
 }
 
 window.logout = function () { window.location.href = 'logout.php'; };
+
+
+// ════════════════════════════════════════════════════════════════
+// DEPARTMENT-LINKED SELECTS (Room & Instructor)
+// ════════════════════════════════════════════════════════════════
+
+// Department to Room Mapping
+const DEPARTMENT_ROOM_MAP = {
+    'Applied Physics': ['407','414'],
+    'Mathematics': ['401'],
+    'General Education': ['401', '407', '412','414'],
+    'Psychology': ['412'],
+    'Others': null  // Triggers text input instead of select
+};
+
+// Department to Instructor Mapping
+const DEPARTMENT_INSTRUCTOR_MAP = {
+    'Applied Physics': ['Mr. Lester D. Bernardino', 'Dr. Raymund B. Bolalin', 'Mr. Hiromi Rivas', 'Mr. Reenier R. Ledesma'],
+    'Mathematics': ['Prof. Larex B. Tagalog', 'Dr. Roel P. Balayan', 'Dr. Jayson D. Tolentino', 'Mr. Raynard C. Redondo', 'Mr. Mark Ronoele R. Gonzalvo' ,'Mr. Joneil G. Pontejos', 'Mr. Eleazar B. Bernales'],
+    'General Education': ['Dr. Joseph T. Moraca', 'Prof. Romeo B. Capucao Jr.', 'Prof. Nerissa B. Capili', 'Prof. Dennis D. Mangubat', 'Dr. Carlito C. Biares', 'Mrs. Rosario U. Tanuecoz', 'Dr. Eugune S. Abdon', 'Mr. Ricky G. Tebang'],
+    'Psychology': ['Dr. Jinamarlyn B. Doctor', 'Dr. Lourdes P. Jusay', 'Prof. Ruth Lareza A. Morales', 'Dr. Rosei O. Cipriano', 'Prof. Myrtle P. Macam', 'Ms. Jazmine B Lasam'],
+    'Others': null  // Triggers text input instead of select
+};
+
+function initDepartmentLinkedSelects() {
+    const deptSelect = document.getElementById('departmentSelect');
+    const roomSelect = document.getElementById('roomSelect');
+    const roomCustom = document.getElementById('roomCustomInput');
+    const instSelect = document.getElementById('instructorName');
+    const instCustom = document.getElementById('instructorCustomInput');
+
+    if (!deptSelect || !roomSelect || !instSelect) return;
+
+    // Populate department select with options
+    Object.keys(DEPARTMENT_ROOM_MAP).forEach(dept => {
+        const option = document.createElement('option');
+        option.value = dept;
+        option.textContent = dept;
+        deptSelect.appendChild(option);
+    });
+
+    // Handle department change - affects both room and instructor
+    deptSelect.addEventListener('change', function () {
+        const selectedDept = this.value;
+
+        if (!selectedDept) {
+            // Department cleared - disable and clear both
+            disableAndClearSelect(roomSelect, roomCustom, 'Select a department first');
+            disableAndClearSelect(instSelect, instCustom, 'Select a department first');
+            return;
+        }
+
+        // Update room select
+        updateDependentSelect(selectedDept, roomSelect, roomCustom, DEPARTMENT_ROOM_MAP, 'a room');
+
+        // Update instructor select
+        updateDependentSelect(selectedDept, instSelect, instCustom, DEPARTMENT_INSTRUCTOR_MAP, 'an instructor');
+    });
+
+    // Handle room select change
+    roomSelect.addEventListener('change', function () {
+        roomCustom.value = this.value;
+        updateRequiredIndicator('roomRequired', this.value);
+    });
+
+    // Handle custom room input
+    roomCustom.addEventListener('input', function () {
+        roomSelect.value = this.value;
+        updateRequiredIndicator('roomRequired', this.value);
+    });
+
+    // Allow switching back from custom input to room select by pressing Escape
+    roomCustom.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            deptSelect.value = '';
+            disableAndClearSelect(roomSelect, roomCustom, 'Select a department first');
+            disableAndClearSelect(instSelect, instCustom, 'Select a department first');
+            deptSelect.focus();
+        }
+    });
+
+    // Handle instructor select change
+    instSelect.addEventListener('change', function () {
+        instCustom.value = this.value;
+        updateRequiredIndicator('instructorRequired', this.value);
+    });
+
+    // Handle custom instructor input
+    instCustom.addEventListener('input', function () {
+        instSelect.value = this.value;
+        updateRequiredIndicator('instructorRequired', this.value);
+    });
+
+    // Allow switching back from custom input to instructor select by pressing Escape
+    instCustom.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            deptSelect.value = '';
+            disableAndClearSelect(roomSelect, roomCustom, 'Select a department first');
+            disableAndClearSelect(instSelect, instCustom, 'Select a department first');
+            deptSelect.focus();
+        }
+    });
+}
+
+// Helper: Disable and clear a dependent select
+function disableAndClearSelect(selectEl, customEl, placeholder) {
+    selectEl.disabled = true;
+    selectEl.value = '';
+    selectEl.style.display = 'block';
+    selectEl.innerHTML = `<option value="" disabled selected>${placeholder}</option>`;
+    if (customEl) {
+        customEl.classList.remove('show');
+        customEl.value = '';
+        customEl.disabled = true;
+    }
+}
+
+// Helper: Update dependent select based on department
+function updateDependentSelect(dept, selectEl, customEl, dataMap, fieldLabel) {
+    const options = dataMap[dept];
+
+    if (dept === 'Others') {
+        // Show custom text input
+        selectEl.style.display = 'none';
+        selectEl.disabled = true;
+        if (customEl) {
+            customEl.classList.add('show');
+            customEl.disabled = false;
+            customEl.value = '';
+            customEl.focus();
+        }
+    } else {
+        // Show select with options
+        selectEl.style.display = 'block';
+        selectEl.disabled = false;
+        if (customEl) {
+            customEl.classList.remove('show');
+            customEl.disabled = true;
+            customEl.value = '';
+        }
+
+        // Populate options
+        selectEl.innerHTML = `<option value="" disabled selected>Select ${fieldLabel}</option>`;
+        if (options && Array.isArray(options)) {
+            options.forEach(option => {
+                const optElement = document.createElement('option');
+                optElement.value = option;
+                optElement.textContent = option;
+                selectEl.appendChild(optElement);
+            });
+        }
+    }
+}
+
+// Helper: Update required indicator
+function updateRequiredIndicator(indicatorId, value) {
+    const indicator = document.getElementById(indicatorId);
+    if (indicator) {
+        if (value) {
+            indicator.classList.add('hidden');
+        } else {
+            indicator.classList.remove('hidden');
+        }
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    initializeRequiredIndicators();
+    initDepartmentLinkedSelects();
+});
+
+// Also initialize if DOM is already ready
+if (document.readyState !== 'loading') {
+    initializeRequiredIndicators();
+    initDepartmentLinkedSelects();
+}

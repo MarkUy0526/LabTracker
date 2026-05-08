@@ -11,10 +11,9 @@ session_destroy();
    ════════════════════════════════════════════════════════════════ */
 $slideImages = [
     'images/anoto.jpg',
-    'images/piece.jpg',
-    'images/ackshwalli.jpg',
-    'images/slide4.jpg',
-    'images/slide5.jpg',
+    'images/Function Generator.jpg',
+    'images/Oscilloscope.jpg',
+    'images/Physics Lab Manual.jpg',
 ];
 ?>
 <!DOCTYPE html>
@@ -203,7 +202,10 @@ $slideImages = [
       position: relative; z-index: 5;
     }
 
-    .brand { display: flex; align-items: center; gap: 10px; animation: fadeUp 0.7s ease both; }
+    .brand {
+      display: flex; align-items: center; gap: 10px; animation: fadeUp 0.7s ease both;
+      border: 0; background: transparent; padding: 0; cursor: default;
+    }
     .brand-mark {
       width: 36px; height: 36px; background: var(--ink); border-radius: 9px;
       display: flex; align-items: center; justify-content: center;
@@ -212,6 +214,20 @@ $slideImages = [
     .brand-name {
       font-family: 'Syne', sans-serif; font-weight: 800;
       font-size: 1.2rem; letter-spacing: 0.04em; color: var(--ink);
+    }
+    .version-label {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 2px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--cream);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      font-size: 0.64rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
 
     .hero-text { animation: fadeUp 0.7s 0.15s ease both; }
@@ -234,7 +250,50 @@ $slideImages = [
       line-height: 1.65; max-width: 300px; font-weight: 300;
     }
 
-    .stats-row { display: flex; gap: 36px; animation: fadeUp 0.7s 0.3s ease both; }
+    .bottom-stack {
+      position: relative;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      animation: fadeUp 0.7s 0.3s ease both;
+    }
+    .credits-strip {
+      width: min(100%, 520px);
+      height: 46px;
+      overflow: hidden;
+      border-left: 2px solid var(--accent);
+      padding-left: 14px;
+      position: relative;
+    }
+    .credit-line {
+      position: absolute;
+      left: 14px;
+      right: 0;
+      opacity: 0;
+      transform: translateY(10px);
+      animation: creditsFade 16s ease infinite;
+    }
+    .credit-line:nth-child(2) { animation-delay: 4s; }
+    .credit-line:nth-child(3) { animation-delay: 8s; }
+    .credit-line:nth-child(4) { animation-delay: 12s; }
+    .credit-kicker {
+      display: block;
+      font-size: 0.64rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 3px;
+    }
+    .credit-main {
+      display: block;
+      font-size: 0.82rem;
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    .stats-row { display: flex; gap: 36px; }
     .stat { display: flex; flex-direction: column; gap: 3px; }
     .stat-num { font-family: 'Syne', sans-serif; font-size: 1.5rem; font-weight: 700; color: var(--ink); }
     .stat-label { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
@@ -262,8 +321,7 @@ $slideImages = [
     }
 
     .tab-row {
-      display: flex; gap: 4px; background: var(--cream);
-      border-radius: 10px; padding: 4px; margin-bottom: 32px;
+      display: none;
     }
     .tab-btn {
       flex: 1; padding: 9px; border: none; background: transparent;
@@ -348,7 +406,132 @@ $slideImages = [
     .guest-count-pill { font-size: 0.72rem; background: var(--cream); color: var(--muted); padding: 3px 9px; border-radius: 20px; font-weight: 500; }
     .guest-tab-sub { font-size: 0.82rem; color: var(--muted); margin-bottom: 12px; font-weight: 300; }
 
-    #error-message { font-size: 0.8rem; color: var(--accent); margin-top: 10px; min-height: 18px; text-align: center; }
+    #error-message,
+    #guest-error-message { font-size: 0.8rem; color: var(--accent); margin-top: 10px; min-height: 18px; text-align: center; }
+    .guest-login-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      margin-bottom: 6px;
+    }
+    .guest-login-sub {
+      font-size: 0.84rem;
+      color: var(--muted);
+      line-height: 1.55;
+      margin-bottom: 24px;
+      font-weight: 300;
+    }
+    .admin-access-row {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      margin-top: 18px;
+    }
+    .admin-access-hint {
+      color: #bbb7ae;
+      font-size: 0.68rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .admin-access-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: #bbb7ae;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s, background 0.2s;
+    }
+    .admin-access-btn:hover,
+    .admin-access-btn:focus-visible {
+      color: var(--accent);
+      border-color: var(--border);
+      background: var(--paper);
+      outline: none;
+    }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(15,15,15,0.44);
+      backdrop-filter: blur(10px);
+    }
+    .modal-backdrop.open { display: flex; }
+    .admin-modal {
+      width: min(100%, 410px);
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: var(--shadow), 0 18px 60px rgba(15,15,15,0.20);
+      padding: 32px;
+      animation: scaleIn 0.24s ease both;
+      position: relative;
+      overflow: hidden;
+    }
+    .admin-modal::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+    }
+    .admin-modal-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .admin-modal-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.18rem;
+      font-weight: 800;
+      margin-bottom: 5px;
+    }
+    .admin-modal-sub {
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.5;
+      font-weight: 300;
+    }
+    .admin-close-btn,
+    .admin-back-btn {
+      border: 1px solid var(--border);
+      background: var(--paper);
+      color: var(--muted);
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s, background 0.2s;
+    }
+    .admin-close-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+    .admin-back-btn {
+      width: 100%;
+      padding: 11px;
+      border-radius: var(--radius);
+      margin-top: 10px;
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+    .admin-close-btn:hover,
+    .admin-back-btn:hover {
+      color: var(--ink);
+      background: var(--cream);
+    }
 
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(18px); }
@@ -357,6 +540,13 @@ $slideImages = [
     @keyframes scaleIn {
       from { opacity: 0; transform: scale(0.93) translateY(12px); }
       to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    @keyframes creditsFade {
+      0% { opacity: 0; transform: translateY(10px); }
+      8% { opacity: 1; transform: translateY(0); }
+      23% { opacity: 1; transform: translateY(0); }
+      31% { opacity: 0; transform: translateY(-8px); }
+      100% { opacity: 0; transform: translateY(-8px); }
     }
     .spinner {
       width: 16px; height: 16px;
@@ -410,7 +600,7 @@ $slideImages = [
     </div>
 
     <!-- content — z-index 5, always above photo layer -->
-    <div class="brand">
+    <button class="brand" id="brandSecret" type="button" aria-label="EquiLab">
       <div class="brand-mark">
         <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2"
              stroke-linecap="round" stroke-linejoin="round">
@@ -419,7 +609,8 @@ $slideImages = [
         </svg>
       </div>
       <span class="brand-name">EQUILAB</span>
-    </div>
+      <span class="version-label">v2</span>
+    </button>
 
     <div class="hero-text">
       <p class="hero-label">Applied Physics Dept.</p>
@@ -433,20 +624,41 @@ $slideImages = [
       </p>
     </div>
 
-    <div class="stats-row">
-      <div class="stat">
-        <span class="stat-num" id="statInventory">—</span>
-        <span class="stat-label">Equipment</span>
+    <div class="bottom-stack">
+      <div class="credits-strip" aria-label="Credits">
+        <div class="credit-line">
+          <span class="credit-kicker">Developed by</span>
+          <span class="credit-main">Kyrie Eleison Abarro, Mark Christian T. Uy, Matthew Broderick Echavez, Harold Pineda</span>
+        </div>
+        <div class="credit-line">
+          <span class="credit-kicker">For</span>
+          <span class="credit-main">EARIST College of Arts and Sciences</span>
+        </div>
+        <div class="credit-line">
+          <span class="credit-kicker">System</span>
+          <span class="credit-main">EquiLab Multi-Purpose Laboratory Tracker</span>
+        </div>
+        <div class="credit-line">
+          <span class="credit-kicker">Release</span>
+          <span class="credit-main">EquiLab Version 2</span>
+        </div>
       </div>
-      <div class="stat-divider"></div>
-      <div class="stat">
-        <span class="stat-num" id="statPending">—</span>
-        <span class="stat-label">Pending</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat">
-        <span class="stat-num" id="statGuests">—</span>
-        <span class="stat-label">Guests today</span>
+
+      <div class="stats-row">
+        <div class="stat">
+          <span class="stat-num" id="statInventory">—</span>
+          <span class="stat-label">Equipment</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-num" id="statPending">—</span>
+          <span class="stat-label">Pending</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-num" id="statGuests">—</span>
+          <span class="stat-label">Guests today</span>
+        </div>
       </div>
     </div>
 
@@ -457,54 +669,41 @@ $slideImages = [
     <div class="card">
 
       <div class="tab-row">
-        <button class="tab-btn active" onclick="switchTab('admin', this)">Admin</button>
-        <button class="tab-btn"        onclick="switchTab('guest', this)">Guest</button>
+        <button class="tab-btn active" type="button">Guest</button>
       </div>
 
-      <div id="panel-admin" class="panel active">
-        <form id="login-form" autocomplete="off">
-          <div class="form-group">
-            <label class="form-label" for="username">Username</label>
-            <input class="form-input" type="text" id="username"
-                   placeholder="Enter your username" autocomplete="username" required />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="password">Password</label>
-            <input class="form-input" type="password" id="password"
-                   placeholder="••••••••" autocomplete="current-password" required />
-          </div>
-          <button class="btn-primary" type="submit" id="loginBtn">
-            <span id="loginBtnInner">
-              Sign in
-              <svg style="display:inline;vertical-align:middle;margin-left:6px"
-                   width="16" height="16" viewBox="0 0 24 24"
-                   fill="none" stroke="currentColor" stroke-width="2.2"
-                   stroke-linecap="round" stroke-linejoin="round">
-                <path d="M5 12h14M12 5l7 7-7 7"/>
-              </svg>
-            </span>
-          </button>
-          <p id="error-message"></p>
-        </form>
-      </div>
+      <div id="panel-guest" class="panel active">
+        <div class="guest-login-title">Borrower Login</div>
+        <p class="guest-login-sub">Start a laboratory equipment request session directly as a guest.</p>
 
-      <div id="panel-guest" class="panel">
-        <div class="guest-tab-header">
-          <span class="guest-tab-title">Recent Guests</span>
-          <span class="guest-count-pill" id="guestCountPill">0 today</span>
-        </div>
-        <p class="guest-tab-sub">Walk-in borrowing session</p>
-        <ul class="recent-guests-list" id="recent-guests-list">
-          <li style="color:#bbb7ae;font-size:0.82rem;text-align:center;padding:12px 0;">Loading guests…</li>
-        </ul>
-        <div class="divider">or start new session</div>
-        <button class="btn-guest" id="guestLoginBtn">
+        <button class="btn-guest" id="guestLoginBtn" type="button">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
           </svg>
-          Continue as Guest
+          Continue as Borrower
         </button>
+        <p id="guest-error-message"></p>
+
+        <div class="divider">recent login numbers</div>
+        <div class="guest-tab-header">
+          <span class="guest-tab-title">Submitted Requests</span>
+          <span class="guest-count-pill" id="guestCountPill">0 today</span>
+        </div>
+        <ul class="recent-guests-list" id="recent-guests-list">
+          <li style="color:#bbb7ae;font-size:0.82rem;text-align:center;padding:12px 0;">Loading guests...</li>
+        </ul>
+
+        <div class="admin-access-row">
+          <span class="admin-access-hint">EquiLab v2</span>
+          <button class="admin-access-btn" id="adminAccessBtn" type="button" title="System access" aria-label="System access">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.04.04a2 2 0 1 1-2.83 2.83l-.04-.04A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.05a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.04.04a2 2 0 1 1-2.83-2.83l.04-.04A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.05A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.88l-.04-.04a2 2 0 1 1 2.83-2.83l.04.04A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.05a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.04-.04a2 2 0 1 1 2.83 2.83l-.04.04A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.05A1.7 1.7 0 0 0 19.4 15Z"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
     </div>
@@ -512,13 +711,73 @@ $slideImages = [
 
 </div>
 
+<div class="modal-backdrop" id="adminModal" role="dialog" aria-modal="true" aria-labelledby="adminModalTitle">
+  <div class="admin-modal">
+    <div class="admin-modal-top">
+      <div>
+        <div class="admin-modal-title" id="adminModalTitle">Admin Login</div>
+        <p class="admin-modal-sub">Restricted access for laboratory administrators.</p>
+      </div>
+      <button class="admin-close-btn" id="closeAdminModal" type="button" aria-label="Back to Guest Login">&times;</button>
+    </div>
+
+    <form id="login-form" autocomplete="off">
+      <div class="form-group">
+        <label class="form-label" for="username">Admin Username</label>
+        <input class="form-input" type="text" id="username"
+               placeholder="Enter admin username" autocomplete="username" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <input class="form-input" type="password" id="password"
+               placeholder="••••••••" autocomplete="current-password" required />
+      </div>
+      <button class="btn-primary" type="submit" id="loginBtn">
+        <span id="loginBtnInner">Login</span>
+      </button>
+      <button class="admin-back-btn" id="backToGuestBtn" type="button">Back to Guest Login</button>
+      <p id="error-message"></p>
+    </form>
+  </div>
+</div>
+
 <script>
-  function switchTab(name, btn) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('panel-' + name).classList.add('active');
+  function openAdminModal() {
+    const modal = document.getElementById('adminModal');
+    modal.classList.add('open');
+    document.getElementById('error-message').textContent = '';
+    setTimeout(() => document.getElementById('username').focus(), 40);
   }
+
+  function closeAdminModal() {
+    const modal = document.getElementById('adminModal');
+    modal.classList.remove('open');
+    document.getElementById('login-form').reset();
+    document.getElementById('error-message').textContent = '';
+  }
+
+  document.getElementById('adminAccessBtn').addEventListener('click', openAdminModal);
+  document.getElementById('closeAdminModal').addEventListener('click', closeAdminModal);
+  document.getElementById('backToGuestBtn').addEventListener('click', closeAdminModal);
+  document.getElementById('adminModal').addEventListener('click', function(e) {
+    if (e.target === this) closeAdminModal();
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && document.getElementById('adminModal').classList.contains('open')) closeAdminModal();
+    if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'a') openAdminModal();
+  });
+
+  let brandClicks = 0;
+  let brandTimer = null;
+  document.getElementById('brandSecret').addEventListener('click', function() {
+    brandClicks += 1;
+    clearTimeout(brandTimer);
+    brandTimer = setTimeout(() => { brandClicks = 0; }, 1300);
+    if (brandClicks >= 5) {
+      brandClicks = 0;
+      openAdminModal();
+    }
+  });
 
   document.getElementById('login-form').addEventListener('submit', function(e) {
     e.preventDefault();
@@ -539,24 +798,36 @@ $slideImages = [
       if (data.status === 'success') {
         window.location.href = 'admin.php';
       } else {
-        btn.innerHTML = `Sign in <svg style="display:inline;vertical-align:middle;margin-left:6px" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+        btn.innerHTML = 'Login';
         btn.disabled  = false;
         errEl.textContent = data.message || 'Incorrect credentials.';
       }
     })
-    .catch(() => { btn.innerHTML = 'Sign in'; btn.disabled = false; errEl.textContent = 'Network error. Try again.'; });
+    .catch(() => { btn.innerHTML = 'Login'; btn.disabled = false; errEl.textContent = 'Network error. Try again.'; });
   });
 
   document.getElementById('guestLoginBtn').addEventListener('click', () => {
     const btn = document.getElementById('guestLoginBtn');
-    btn.textContent = 'Starting session…'; btn.disabled = true;
+    const errEl = document.getElementById('guest-error-message');
+    const guestBtnHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner"></span>';
+    btn.disabled = true;
+    errEl.textContent = '';
     fetch('guest_login.php')
     .then(r => r.json())
     .then(data => {
       if (data.status === 'success') { window.location.href = 'guest.php'; }
-      else { alert('Error: ' + data.message); btn.textContent = 'Continue as Guest'; btn.disabled = false; }
+      else {
+        btn.innerHTML = guestBtnHtml;
+        btn.disabled = false;
+        errEl.textContent = data.message || 'Guest login failed.';
+      }
     })
-    .catch(() => { alert('Guest login failed.'); btn.textContent = 'Continue as Guest'; btn.disabled = false; });
+    .catch(() => {
+      btn.innerHTML = guestBtnHtml;
+      btn.disabled = false;
+      errEl.textContent = 'Guest login failed.';
+    });
   });
 
   function fetchRecentGuests() {
@@ -564,6 +835,7 @@ $slideImages = [
       if (!data.success || !Array.isArray(data.data)) return;
       const list  = document.getElementById('recent-guests-list');
       const pill  = document.getElementById('guestCountPill');
+      if (!list || !pill) return;
       const today = new Date().toISOString().slice(0, 10);
       pill.textContent = data.data.filter(g => g.created_at && g.created_at.startsWith(today)).length + ' today';
       list.innerHTML = '';
