@@ -257,22 +257,38 @@ try {
   $sheet->getStyle("A$row")->getFont()->setBold(true)->setSize(11);
   $row += 2;
 
-  $signatories = ['Mr. Lester D. Bernardino', 'Mr. Hiromi Rivas'];
+  $signatories = [
+    ['name' => 'Mr. Lester D. Bernardino', 'title' => 'Chairperson'],
+    ['name' => 'Mr. Hiromi Rivas', 'title' => 'Applied Physics Professor']
+  ];
+
+  // Signature lines
   $colIndex = 1;
   foreach ($signatories as $signatory) {
     $colLetter = chr(64 + $colIndex);
-    $sheet->setCellValue("$colLetter$row", $signatory);
+    $sheet->setCellValue("$colLetter$row", '______________');
     $sheet->getStyle("$colLetter$row")->getAlignment()->setHorizontal('center');
-    $row++;
-    $sheet->setCellValue("$colLetter$row", '_____________________');
+    $colIndex++;
+  }
+  $row++;
+
+  // Names
+  $colIndex = 1;
+  foreach ($signatories as $signatory) {
+    $colLetter = chr(64 + $colIndex);
+    $sheet->setCellValue("$colLetter$row", $signatory['name']);
     $sheet->getStyle("$colLetter$row")->getAlignment()->setHorizontal('center');
-    $row++;
-    $sheet->setCellValue("$colLetter$row", 'Signature');
-    $sheet->getStyle("$colLetter$row")->getAlignment()->setHorizontal('center')->setWrapText(true);
-    $row++;
-    $sheet->setCellValue("$colLetter$row", date('m/d/Y'));
+    $sheet->getStyle("$colLetter$row")->getFont()->setBold(true);
+    $colIndex++;
+  }
+  $row++;
+
+  // Titles
+  $colIndex = 1;
+  foreach ($signatories as $signatory) {
+    $colLetter = chr(64 + $colIndex);
+    $sheet->setCellValue("$colLetter$row", $signatory['title']);
     $sheet->getStyle("$colLetter$row")->getAlignment()->setHorizontal('center');
-    $row = $row - 3;
     $colIndex++;
   }
 
