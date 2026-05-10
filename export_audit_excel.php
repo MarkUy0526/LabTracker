@@ -261,18 +261,15 @@ try {
   $colIndex = 1;
   foreach ($signatories as $signatory) {
     $colLetter = chr(64 + $colIndex);
-    $sheet->setCellValue("$colLetter$row", $signatory);
-    $sheet->getStyle("$colLetter$row")->getAlignment()->setHorizontal('center');
-    $row++;
     $sheet->setCellValue("$colLetter$row", '_____________________');
     $sheet->getStyle("$colLetter$row")->getAlignment()->setHorizontal('center');
     $row++;
-    $sheet->setCellValue("$colLetter$row", 'Signature');
-    $sheet->getStyle("$colLetter$row")->getAlignment()->setHorizontal('center')->setWrapText(true);
-    $row++;
-    $sheet->setCellValue("$colLetter$row", date('m/d/Y'));
+    $sheet->setCellValue("$colLetter$row", $signatory);
     $sheet->getStyle("$colLetter$row")->getAlignment()->setHorizontal('center');
-    $row = $row - 3;
+    $row++;
+    $sheet->setCellValue("$colLetter$row", $signatory === 'Mr. Hiromi Rivas' ? 'Applied Physics Professor' : 'Chairperson');
+    $sheet->getStyle("$colLetter$row")->getAlignment()->setHorizontal('center');
+    $row = $row - 2;
     $colIndex++;
   }
 
