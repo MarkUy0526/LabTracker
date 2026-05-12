@@ -6,7 +6,7 @@ session_start();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guest Dashboard</title>
+    <title>Borrower Dashboard</title>
     <link rel="stylesheet" href="dashboard.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
@@ -674,8 +674,8 @@ session_start();
     <div class="main-content">
         <div id="topBar" class="top-bar">
             <header>
-                <h1>Guest</h1>
-                <p id="guestLoginNumber" style="font-size:1rem;color:#555;"></p>
+                <h1>Borrower</h1>
+                <p id="borrowerLoginNumber" style="font-size:1rem;color:#555;"></p>
             </header>
         </div>
 
@@ -740,7 +740,7 @@ session_start();
                         <p class="rules-slide-title">Responsibility &amp; access</p>
                         <ol start="4">
                             <li><strong>Timely returns.</strong> Equipment must be returned promptly on the agreed return date. Late returns may result in a temporary or permanent suspension of borrowing privileges.</li>
-                            <li><strong>Registered guests only.</strong> Only guests with a valid Guest Login Number issued by the system are permitted to borrow laboratory equipment. Lending your guest number to another person is strictly prohibited.</li>
+                            <li><strong>Registered borrowers only.</strong> Only borrowers with a valid Borrower Login Number issued by the system are permitted to borrow laboratory equipment. Lending your borrower number to another person is strictly prohibited.</li>
                         </ol>
                         <div class="scroll-hint" id="scrollHint1">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
@@ -793,7 +793,7 @@ session_start();
                     </tr>
                     <tr>
                         <td style="padding:5px;text-align:left;">
-                            <strong>Guest Login Number:</strong>
+                            <strong>Borrower Login Number:</strong>
                             <span id="borrowerGuestNumber">________________________</span>
                         </td>
                         <td style="padding:5px;text-align:left;">
@@ -908,7 +908,7 @@ session_start();
 
             <p class="review-section-title">Borrower details</p>
             <div class="review-grid">
-                <div class="review-field"><span class="r-label">Guest Login No.</span><span class="r-value" id="rv-guest"></span></div>
+                <div class="review-field"><span class="r-label">Borrower Login No.</span><span class="r-value" id="rv-guest"></span></div>
                 <div class="review-field"><span class="r-label">Date</span><span class="r-value" id="rv-date"></span></div>
                 <div class="review-field"><span class="r-label">Borrower's Name</span><span class="r-value" id="rv-name"></span></div>
                 <div class="review-field"><span class="r-label">Instructor</span><span class="r-value" id="rv-instructor"></span></div>
@@ -943,8 +943,8 @@ session_start();
     <div id="confirmationModal" class="modal">
         <div class="modal-content">
             <h2>Confirm Borrowing Request</h2>
-            <p>Please re-enter your Guest Login Number to confirm:</p>
-            <input type="text" id="confirmGuestNumber" placeholder="Enter Guest Login Number">
+            <p>Please re-enter your Borrower Login Number to confirm:</p>
+            <input type="text" id="confirmGuestNumber" placeholder="Enter Borrower Login Number">
             <button id="confirmBtn" onclick="submitBorrowRequest()">Confirm</button>
             <button id="cancelBtn" onclick="closeConfirmationModal()">Cancel</button>
         </div>

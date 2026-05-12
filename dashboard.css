@@ -573,7 +573,7 @@ select:focus, #categorySelect:focus {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Guest: full-screen borrower form (body-level) */
+/* Borrower: full-screen borrower form (body-level) */
 .guest-borrower-overlay {
   display: none;
   position: fixed;
@@ -768,7 +768,7 @@ select:focus, #categorySelect:focus {
   gap: 10px;
 }
 
-/* Guest: confirm step above borrower overlay */
+/* Borrower: confirm step above borrower overlay */
 #confirmationModal {
   z-index: 1250;
 }

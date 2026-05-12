@@ -2136,7 +2136,7 @@ function renderReportCard(entry) {
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
       <div>
         <span style="font-weight:600;font-size:14px;">${escHtml(req.borrower_name)}</span>
-        <span style="color:var(--text-3);font-size:12px;margin-left:8px;">Guest #${escHtml(req.guest_number)}</span>
+        <span style="color:var(--text-3);font-size:12px;margin-left:8px;">Borrower #${escHtml(req.guest_number)}</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="background:${statusBg};color:${statusColor};font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;">${escHtml(req.status)}</span>
@@ -2287,7 +2287,7 @@ function wireReportCardControls(container) {
             <h2 style="margin: 10px 0;">Equipment-borrowing Form</h2>
           </div>
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-            <tr><td style="padding: 5px;"><strong>Guest Login Number:</strong> ${escHtml(req.guest_number)}</td><td style="padding: 5px;"><strong>Date:</strong> ${formatDateToDDMMYYYY(req.date)}</td></tr>
+            <tr><td style="padding: 5px;"><strong>Borrower Login Number:</strong> ${escHtml(req.guest_number)}</td><td style="padding: 5px;"><strong>Date:</strong> ${formatDateToDDMMYYYY(req.date)}</td></tr>
             <tr><td style="padding: 5px;"><strong>Borrower's Name:</strong> ${escHtml(req.borrower_name)}</td><td style="padding: 5px;"><strong>Instructor's Name:</strong> ${escHtml(req.instructor_name || '-')}</td></tr>
             <tr><td style="padding: 5px;"><strong>Student ID:</strong> ${escHtml(req.student_id || '-')}</td><td style="padding: 5px;"><strong>Subject Code:</strong> ${escHtml(req.subject_code || '-')}</td></tr>
             <tr><td style="padding: 5px;"><strong>Department:</strong> ${escHtml(req.department || '-')}</td><td style="padding: 5px;"><strong>Date(s) of Usage:</strong> ${formatDateToDDMMYYYY(req.usage_date)}</td></tr>
@@ -3284,7 +3284,7 @@ function updateBorrowRequestsOverview() {
         div.style.cssText = 'padding:10px 14px;margin-bottom:6px;cursor:default;';
         div.innerHTML = `
           <div style="font-weight:500;font-size:13px;">${escHtml(req.borrower_name)}</div>
-          <div style="font-size:11px;color:var(--text-3);">Guest #${escHtml(req.guest_number)} · ${escHtml(req.student_id || '—')}</div>`;
+          <div style="font-size:11px;color:var(--text-3);">Borrower #${escHtml(req.guest_number)} · ${escHtml(req.student_id || '—')}</div>`;
         container.appendChild(div);
       });
       if (json.data.length > 5) {
@@ -3363,7 +3363,7 @@ function loadBorrowRequests() {
       const div = document.createElement('div');
       div.className = 'borrow-request';
       div.innerHTML = `
-        <strong>Guest Number:</strong> ${request.guest_number}<br/>
+        <strong>Borrower Number:</strong> ${request.guest_number}<br/>
         <strong>Borrower's Name:</strong> ${request.borrower_name}<br/>
         <strong>Student ID:</strong> ${request.student_id}<br/>
         <button class="view-request-btn" data-id="${request.id}">View Request</button>
@@ -3380,7 +3380,7 @@ function loadBorrowRequests() {
                 <h4>COLLEGE OF ARTS AND SCIENCES</h4><h4>APPLIED PHYSICS DEPARTMENT</h4>
                 <h3>Equipment-borrowing Form</h3>
               </td></tr>
-              <tr><td><strong>Guest Login Number:</strong> ${request.guest_number}</td><td><strong>Date:</strong> ${formatDateToDDMMYYYY(request.date)}</td></tr>
+              <tr><td><strong>Borrower Login Number:</strong> ${request.guest_number}</td><td><strong>Date:</strong> ${formatDateToDDMMYYYY(request.date)}</td></tr>
               <tr><td><strong>Borrower's Name:</strong> ${request.borrower_name}</td><td><strong>Instructor's Name:</strong> ${request.instructor_name}</td></tr>
               <tr><td><strong>Student ID:</strong> ${request.student_id}</td><td><strong>Subject Code:</strong> ${request.subject_code}</td></tr>
               <tr><td><strong>Department:</strong> ${request.department || '—'}</td><td><strong>Date(s) of Usage:</strong> ${formatDateToDDMMYYYY(request.usage_date)}</td></tr>
@@ -3588,7 +3588,7 @@ function loadReportsLegacy() {
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
             <div>
               <span style="font-weight:600;font-size:14px;">${escHtml(req.borrower_name)}</span>
-              <span style="color:var(--text-3);font-size:12px;margin-left:8px;">Guest #${escHtml(req.guest_number)}</span>
+              <span style="color:var(--text-3);font-size:12px;margin-left:8px;">Borrower #${escHtml(req.guest_number)}</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="background:${statusBg};color:${statusColor};font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;">${escHtml(req.status)}</span>
@@ -3731,7 +3731,7 @@ function loadReportsLegacy() {
 
               <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
                 <tr>
-                  <td style="padding: 5px;"><strong>Guest Login Number:</strong> ${escHtml(req.guest_number)}</td>
+                  <td style="padding: 5px;"><strong>Borrower Login Number:</strong> ${escHtml(req.guest_number)}</td>
                   <td style="padding: 5px;"><strong>Date:</strong> ${formatDateToDDMMYYYY(req.date)}</td>
                 </tr>
                 <tr>

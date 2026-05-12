@@ -657,7 +657,7 @@ $slideImages = [
         <div class="stat-divider"></div>
         <div class="stat">
           <span class="stat-num" id="statGuests">—</span>
-          <span class="stat-label">Guests today</span>
+          <span class="stat-label">Borrowers today</span>
         </div>
       </div>
     </div>
@@ -669,12 +669,12 @@ $slideImages = [
     <div class="card">
 
       <div class="tab-row">
-        <button class="tab-btn active" type="button">Guest</button>
+        <button class="tab-btn active" type="button">Borrower</button>
       </div>
 
       <div id="panel-guest" class="panel active">
         <div class="guest-login-title">Borrower Login</div>
-        <p class="guest-login-sub">Start a laboratory equipment request session directly as a guest.</p>
+        <p class="guest-login-sub">Start a laboratory equipment request session directly as a borrower.</p>
 
         <button class="btn-guest" id="guestLoginBtn" type="button">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -688,15 +688,15 @@ $slideImages = [
         <div class="divider">recent login numbers</div>
         <div class="guest-tab-header">
           <span class="guest-tab-title">Submitted Requests</span>
-          <span class="guest-count-pill" id="guestCountPill">0 today</span>
+          <span class="guest-count-pill" id="borrowerCountPill">0 today</span>
         </div>
         <ul class="recent-guests-list" id="recent-guests-list">
-          <li style="color:#bbb7ae;font-size:0.82rem;text-align:center;padding:12px 0;">Loading guests...</li>
+          <li style="color:#bbb7ae;font-size:0.82rem;text-align:center;padding:12px 0;">Loading borrowers...</li>
         </ul>
 
         <div class="admin-access-row">
           <span class="admin-access-hint">EquiLab v2</span>
-          <button class="admin-access-btn" id="adminAccessBtn" type="button" title="System access" aria-label="System access">
+          <button class="admin-access-btn" id="adminAccessBtn" type="button" title="Admin access" aria-label="Admin access">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3"/>
@@ -718,7 +718,7 @@ $slideImages = [
         <div class="admin-modal-title" id="adminModalTitle">Admin Login</div>
         <p class="admin-modal-sub">Restricted access for laboratory administrators.</p>
       </div>
-      <button class="admin-close-btn" id="closeAdminModal" type="button" aria-label="Back to Guest Login">&times;</button>
+      <button class="admin-close-btn" id="closeAdminModal" type="button" aria-label="Back to Borrower Login">&times;</button>
     </div>
 
     <form id="login-form" autocomplete="off">
@@ -735,7 +735,7 @@ $slideImages = [
       <button class="btn-primary" type="submit" id="loginBtn">
         <span id="loginBtnInner">Login</span>
       </button>
-      <button class="admin-back-btn" id="backToGuestBtn" type="button">Back to Guest Login</button>
+      <button class="admin-back-btn" id="backToGuestBtn" type="button">Back to Borrower Login</button>
       <p id="error-message"></p>
     </form>
   </div>
@@ -820,13 +820,13 @@ $slideImages = [
       else {
         btn.innerHTML = guestBtnHtml;
         btn.disabled = false;
-        errEl.textContent = data.message || 'Guest login failed.';
+        errEl.textContent = data.message || 'Borrower login failed.';
       }
     })
     .catch(() => {
       btn.innerHTML = guestBtnHtml;
       btn.disabled = false;
-      errEl.textContent = 'Guest login failed.';
+      errEl.textContent = 'Borrower login failed.';
     });
   });
 
@@ -834,13 +834,13 @@ $slideImages = [
     fetch('fetch_recent_guests.php').then(r => r.json()).then(data => {
       if (!data.success || !Array.isArray(data.data)) return;
       const list  = document.getElementById('recent-guests-list');
-      const pill  = document.getElementById('guestCountPill');
+      const pill  = document.getElementById('borrowerCountPill');
       if (!list || !pill) return;
       const today = new Date().toISOString().slice(0, 10);
       pill.textContent = data.data.filter(g => g.created_at && g.created_at.startsWith(today)).length + ' today';
       list.innerHTML = '';
       if (!data.data.length) {
-        list.innerHTML = '<li style="color:#bbb7ae;font-size:0.82rem;text-align:center;padding:12px 0;">No recent guests</li>';
+        list.innerHTML = '<li style="color:#bbb7ae;font-size:0.82rem;text-align:center;padding:12px 0;">No recent borrowers</li>';
         return;
       }
       data.data.forEach((item, i) => {

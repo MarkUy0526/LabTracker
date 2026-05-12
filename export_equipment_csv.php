@@ -33,7 +33,7 @@ while ($row = $result->fetch_assoc()) {
         $row['working_qty'],
         $row['not_working_qty'],
         $row['maintenance_qty'],
-        ((int) ($row['is_borrowable'] ?? 1) === 1) ? 'Available for Borrowing' : 'Restricted / Hidden from Guest Side',
+        ((int) ($row['is_borrowable'] ?? 1) === 1) ? 'Available for Borrowing' : 'Restricted / Hidden from Borrower Side',
         $row['description'],
         $row['last_imported_at'],
         $row['last_edited_at'],

@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
       .then(response => response.json())
       .then(data => {
         if (data.status === 'success') {
-          alert(`Your guest login number is: ${data.guest_id}`);
+          alert(`Your borrower login number is: ${data.guest_id}`);
           window.location.href = 'guest.php';
         } else {
           alert('Error: ' + data.message);
@@ -51,11 +51,11 @@ document.addEventListener('DOMContentLoaded', () => {
       })
       .catch(error => {
         console.error('Error:', error);
-        alert('Guest login request failed.');
+        alert('Borrower login request failed.');
       });
   });
 
-  function fetchRecentGuests() {
+  function fetchRecentBorrowers() {
     fetch('fetch_recent_guests.php')
       .then(response => response.json())
       .then(data => {
@@ -77,10 +77,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       })
       .catch(err => {
-        console.error('Failed to load recent guests:', err);
+        console.error('Failed to load recent borrowers:', err);
       });
   }
 
-  fetchRecentGuests();
-  setInterval(fetchRecentGuests, 30000);
+  fetchRecentBorrowers();
+  setInterval(fetchRecentBorrowers, 30000);
 });

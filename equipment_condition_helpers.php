@@ -116,7 +116,7 @@ function parseBorrowableFlag($value): int
         'n',
         'restricted',
         'hidden',
-        'restricted / hidden from guest side',
+        'restricted / hidden from borrower side',
         'not borrowable',
         'unavailable',
     ];

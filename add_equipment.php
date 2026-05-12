@@ -105,7 +105,7 @@ $snapshot = json_encode([
     'not_working_qty' => $notWorkingQty,
     'maintenance_qty' => $maintenanceQty,
     'description'     => $description,
-    'borrow_visibility' => $isBorrowable ? 'Available for Borrowing' : 'Restricted / Hidden from Guest Side',
+    'borrow_visibility' => $isBorrowable ? 'Available for Borrowing' : 'Restricted / Hidden from Borrower Side',
 ], JSON_UNESCAPED_UNICODE);
 
 $now    = date('Y-m-d H:i:s');

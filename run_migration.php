@@ -22,7 +22,7 @@ try {
         }
     }
 
-    echo "<p><a href='guest.php'>&larr; Back to Guest Form</a></p>";
+    echo "<p><a href='guest.php'>&larr; Back to Borrower Form</a></p>";
 
 } catch (Exception $e) {
     echo "<p style='color: red;'><strong>Error:</strong> " . $e->getMessage() . "</p>";

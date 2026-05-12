@@ -982,7 +982,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
         <div class="reports-filter-row">
           <div class="reports-search-field">
             <label for="reportsSearch">Search</label>
-            <input type="search" id="reportsSearch" placeholder="Borrower, guest, instructor, room">
+            <input type="search" id="reportsSearch" placeholder="Borrower, borrower, instructor, room">
           </div>
           <div>
             <label for="reportsStatusFilter">Status</label>
@@ -1053,7 +1053,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
       <label>Borrowing Visibility</label>
       <select id="borrowingStatus">
         <option value="1">Available for Borrowing</option>
-        <option value="0">Restricted / Hidden from Guest Side</option>
+        <option value="0">Restricted / Hidden from Borrower Side</option>
       </select>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
         <div><label>Total Qty</label><input type="number" id="totalQty" /></div>

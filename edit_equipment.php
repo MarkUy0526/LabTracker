@@ -104,8 +104,8 @@ if ($logStmt && !empty($oldData)) {
         $oldVal = (string) ($oldData[$col] ?? '');
         $newVal = $newData[$col] ?? '';
         if ($col === 'is_borrowable') {
-            $oldVal = ((int) $oldVal === 1) ? 'Available for Borrowing' : 'Restricted / Hidden from Guest Side';
-            $newVal = ((int) $newVal === 1) ? 'Available for Borrowing' : 'Restricted / Hidden from Guest Side';
+            $oldVal = ((int) $oldVal === 1) ? 'Available for Borrowing' : 'Restricted / Hidden from Borrower Side';
+            $newVal = ((int) $newVal === 1) ? 'Available for Borrowing' : 'Restricted / Hidden from Borrower Side';
         }
 
         if ($oldVal !== $newVal) {

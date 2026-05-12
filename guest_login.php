@@ -8,52 +8,52 @@ $day    = $date->format("d"); // 2-digit day
 $year   = $date->format("y"); // 2-digit year
 $prefix = $month . $day . $year; // e.g. "041326" for April 13, 2026
 
-// Get the most recent guest number for today's prefix
+// Get the most recent borrower login number for today's prefix
 $sql  = "SELECT guest_number FROM guests WHERE guest_number LIKE ? ORDER BY guest_number DESC LIMIT 1";
 $stmt = $conn->prepare($sql);
 $like = $prefix . "%";
 $stmt->bind_param("s", $like);
 $stmt->execute();
 $result          = $stmt->get_result();
-$lastGuestNumber = $result->fetch_assoc()['guest_number'] ?? null;
+$lastBorrowerNumber = $result->fetch_assoc()['guest_number'] ?? null;
 $stmt->close();
 
-if ($lastGuestNumber) {
-    // Check if this last guest number has ever submitted a borrow request.
+if ($lastBorrowerNumber) {
+    // Check if this last borrower login number has ever submitted a borrow request.
     // If NOT, reuse it — do not generate a new number and do not insert a new row.
     $check = $conn->prepare("SELECT id FROM borrow_requests WHERE guest_number = ? LIMIT 1");
-    $check->bind_param("s", $lastGuestNumber);
+    $check->bind_param("s", $lastBorrowerNumber);
     $check->execute();
     $check->store_result();
     $hasBorrow = $check->num_rows > 0;
     $check->close();
 
     if (!$hasBorrow) {
-        // Reuse the existing guest number — no INSERT, no increment
-        $_SESSION['guest_id'] = $lastGuestNumber;
-        echo json_encode(["status" => "success", "guest_id" => $lastGuestNumber]);
+        // Reuse the existing borrower number — no INSERT, no increment
+        $_SESSION['guest_id'] = $lastBorrowerNumber;
+        echo json_encode(["status" => "success", "guest_id" => $lastBorrowerNumber]);
         exit;
     }
 
-    // Last guest did borrow — generate the next sequential number for today
+    // Last borrower did borrow — generate the next sequential number for today
     // Sequence is the last 2 characters (positions 6-7), zero-padded to 2 digits
-    $lastSeq = (int) substr($lastGuestNumber, 6); // e.g. "04132601" → 1
+    $lastSeq = (int) substr($lastBorrowerNumber, 6); // e.g. "04132601" → 1
     $newSeq  = str_pad($lastSeq + 1, 2, '0', STR_PAD_LEFT);
 } else {
     $newSeq = "01";
 }
 
-$guestNumber = $prefix . $newSeq; // e.g. "04132601"
+$borrowerNumber = $prefix . $newSeq; // e.g. "04132601"
 
 $sql  = "INSERT INTO guests (guest_number) VALUES (?)";
 $stmt = $conn->prepare($sql);
-$stmt->bind_param("s", $guestNumber);
+$stmt->bind_param("s", $borrowerNumber);
 
 if ($stmt->execute()) {
-    $_SESSION['guest_id'] = $guestNumber;
-    echo json_encode(["status" => "success", "guest_id" => $guestNumber]);
+    $_SESSION['guest_id'] = $borrowerNumber;
+    echo json_encode(["status" => "success", "guest_id" => $borrowerNumber]);
 } else {
-    echo json_encode(["status" => "error", "message" => "Error generating guest number."]);
+    echo json_encode(["status" => "error", "message" => "Error generating borrower login number."]);
 }
 
 $stmt->close();

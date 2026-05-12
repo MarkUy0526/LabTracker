@@ -296,7 +296,7 @@ function closeReviewModal() {
 // ════════════════════════════════════════════════
 $(document).ready(function () {
     loadHiromiSignature();
-    getGuestNumber();
+    getBorrowerNumber();
     setCurrentDate();
     fetchEquipment();
     loadInstructorList();
@@ -354,13 +354,13 @@ $(document).ready(function () {
 // ════════════════════════════════════════════════
 // GUEST NUMBER & DATE
 // ════════════════════════════════════════════════
-function getGuestNumber() {
+function getBorrowerNumber() {
     $.ajax({
         url: 'get_guest_number.php', method: 'GET',
         success: function (res) {
             const data = JSON.parse(res);
             $('#guestNumber').val(data.guest_number);
-            $('#guestLoginNumber').text('Login Number: ' + data.guest_number);
+            $('#borrowerLoginNumber').text('Login Number: ' + data.guest_number);
             $('#borrowerGuestNumber').text(data.guest_number);
         }
     });
@@ -585,7 +585,7 @@ function submitBorrowRequest() {
     const confirmNum  = $('#confirmGuestNumber').val().trim();
     const guestNum    = $('#borrowerGuestNumber').text().trim();
 
-    if (confirmNum !== guestNum) { alert('Guest number does not match.'); return; }
+    if (confirmNum !== guestNum) { alert('Borrower number does not match.'); return; }
 
     const roomCustom = document.getElementById('roomCustomInput');
     const roomSelect = document.getElementById('roomSelect');
