@@ -13,18 +13,27 @@ require 'db.php';
 try {
   date_default_timezone_set('Asia/Manila');
 
+  // Get all_equipment parameter to include never-borrowed items
+  $allEquipment = isset($_GET['all_equipment']) && $_GET['all_equipment'] === '1';
+  $limit = $allEquipment ? '' : 'LIMIT 10';
+
   $query = "
     SELECT
-      be.equipment_name,
-      COUNT(br.id) as borrow_frequency,
-      SUM(be.quantity) as total_qty_borrowed
-    FROM borrow_requests br
-    JOIN borrowed_equipment be ON br.id = be.borrow_request_id
-    WHERE br.status = 'Accepted'
+      eq.equipment_id,
+      eq.equipment_name,
+      COUNT(CASE WHEN br.status='Accepted' THEN br.id END) as borrow_frequency,
+      SUM(CASE WHEN br.status='Accepted' THEN be.quantity ELSE 0 END) as total_qty_borrowed,
+      MAX(CASE WHEN br.status='Accepted' THEN br.date ELSE NULL END) as last_borrow_date,
+      eq.total_qty,
+      eq.available
+    FROM equipment eq
+    LEFT JOIN borrowed_equipment be ON eq.equipment_name = be.equipment_name
+    LEFT JOIN borrow_requests br ON be.borrow_request_id = br.id
+      AND br.status='Accepted'
       AND br.date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-    GROUP BY be.equipment_name
+    GROUP BY eq.equipment_id, eq.equipment_name, eq.total_qty, eq.available
     ORDER BY borrow_frequency DESC, total_qty_borrowed DESC
-    LIMIT 10
+    $limit
   ";
 
   $result = $conn->query($query);
@@ -38,9 +47,13 @@ try {
   while ($row = $result->fetch_assoc()) {
     $equipment[] = [
       'rank' => $rank++,
+      'equipment_id' => $row['equipment_id'],
       'equipment_name' => $row['equipment_name'],
       'borrow_frequency' => (int)$row['borrow_frequency'],
-      'total_qty_borrowed' => (int)$row['total_qty_borrowed']
+      'total_qty_borrowed' => (int)($row['total_qty_borrowed'] ?? 0),
+      'last_borrow_date' => $row['last_borrow_date'],
+      'total_qty' => (int)$row['total_qty'],
+      'available' => (int)$row['available']
     ];
   }
 
@@ -48,10 +61,12 @@ try {
     'success' => true,
     'data' => $equipment,
     'count' => count($equipment),
-    'period' => 'Last 6 months'
+    'period' => 'Last 6 months',
+    'includes_all_equipment' => $allEquipment
   ]);
 } catch (Exception $e) {
   http_response_code(500);
   echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
 }
 ?>
+

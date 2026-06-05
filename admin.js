@@ -807,8 +807,9 @@ function showAuditPastAudits() {
             <td style="padding:10px 12px;text-align:center;color:var(--accent);font-weight:600;">${audit.complete_count}</td>
             <td style="padding:10px 12px;text-align:center;color:var(--danger);font-weight:600;">${audit.missing_count}</td>
             <td style="padding:10px 12px;text-align:center;color:var(--warn);font-weight:600;">${audit.damaged_count}</td>
-            <td style="padding:10px 12px;text-align:center;">
-              <button class="view-audit-details-btn" data-audit-id="${audit.id}" style="background:var(--surface-2);border:1px solid var(--border);padding:5px 10px;border-radius:var(--radius);cursor:pointer;font-size:11px;">View Details</button>
+            <td style="padding:10px 12px;text-align:center;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
+              <button class="view-audit-details-btn" data-audit-id="${audit.id}" style="background:var(--surface-2);border:1px solid var(--border);padding:5px 10px;border-radius:var(--radius);cursor:pointer;font-size:11px;">View</button>
+              <button class="export-audit-pdf-btn" data-audit-id="${audit.id}" style="background:var(--accent-soft);border:1px solid #a8d5b5;padding:5px 10px;border-radius:var(--radius);cursor:pointer;font-size:11px;color:var(--accent);">PDF</button>
             </td>
           </tr>
         `).join('');
@@ -818,6 +819,13 @@ function showAuditPastAudits() {
           btn.addEventListener('click', function() {
             const auditId = this.getAttribute('data-audit-id');
             viewAuditDetail(auditId);
+          });
+        });
+
+        document.querySelectorAll('.export-audit-pdf-btn').forEach(btn => {
+          btn.addEventListener('click', function() {
+            const auditId = this.getAttribute('data-audit-id');
+            exportAuditPDF(auditId);
           });
         });
       }
@@ -920,6 +928,170 @@ function exportAuditExcel(auditId) {
   }
   const url = 'export_audit_excel.php?audit_id=' + encodeURIComponent(auditId);
   window.open(url, '_blank');
+}
+
+function exportAuditPDF(auditId) {
+  if (!auditId) { showErrorFeedback('No audit selected'); return; }
+
+  const fileName = `audit-report-${auditId}-${new Date().toISOString().split('T')[0]}.pdf`;
+
+  Promise.all([
+    fetch(`get_audit_details.php?audit_id=${auditId}`).then(r => r.json()),
+    fetch('get_most_borrowed.php?all_equipment=1').then(r => r.json())
+  ])
+    .then(([auditRes, borrowRes]) => {
+      if (!auditRes.success) throw new Error(auditRes.message || 'Failed to fetch audit');
+      if (!borrowRes.success) throw new Error(borrowRes.message || 'Failed to fetch equipment');
+
+      const html = buildAuditPDFHTML(auditRes.data, borrowRes.data);
+
+      html2pdf()
+        .set({
+          margin: [10, 10, 10, 10],
+          filename: fileName,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
+        })
+        .from(html)
+        .save();
+
+      showInventoryFeedback('PDF exported successfully');
+    })
+    .catch(err => showErrorFeedback('Failed to export PDF: ' + err.message));
+}
+
+function buildAuditPDFHTML(auditData, equipmentData) {
+  const auditDate = new Date(auditData.audit_date).toLocaleDateString('en-PH');
+  const generatedDate = new Date().toLocaleDateString('en-PH');
+  const generatedTime = new Date().toLocaleTimeString('en-PH');
+
+  const statsTotal = auditData.items ? auditData.items.length : 0;
+  const completeCount = auditData.complete_count || 0;
+  const missingCount = auditData.missing_count || 0;
+  const damagedCount = auditData.damaged_count || 0;
+
+  const mostBorrowedRows = (equipmentData || [])
+    .slice(0, 10)
+    .map(eq => `
+      <tr style="border-bottom:1px solid #ddd;">
+        <td style="padding:6px 8px;text-align:center;font-size:11px;">${eq.rank}</td>
+        <td style="padding:6px 8px;font-size:11px;">${escHtml(eq.equipment_name)}</td>
+        <td style="padding:6px 8px;font-size:11px;text-align:center;">${eq.equipment_id || 'N/A'}</td>
+        <td style="padding:6px 8px;text-align:center;font-size:11px;color:#27ae60;">${eq.borrow_frequency || 0}</td>
+        <td style="padding:6px 8px;text-align:center;font-size:11px;">${eq.available || 0}/${eq.total_qty || 0}</td>
+        <td style="padding:6px 8px;font-size:10px;color:#666;">${eq.last_borrow_date ? new Date(eq.last_borrow_date).toLocaleDateString('en-PH') : 'Never'}</td>
+      </tr>
+    `).join('');
+
+  const equipmentRows = (equipmentData || [])
+    .map(eq => `
+      <tr style="border-bottom:1px solid #eee;">
+        <td style="padding:5px 8px;font-size:10px;font-weight:600;">${escHtml(eq.equipment_id || 'N/A')}</td>
+        <td style="padding:5px 8px;font-size:10px;">${escHtml(eq.equipment_name)}</td>
+        <td style="padding:5px 8px;text-align:center;font-size:10px;">${eq.total_qty || 0}</td>
+        <td style="padding:5px 8px;text-align:center;font-size:10px;color:#27ae60;">${eq.available || 0}</td>
+        <td style="padding:5px 8px;text-align:center;font-size:10px;">${eq.borrow_frequency || 0}</td>
+        <td style="padding:5px 8px;font-size:9px;color:#666;">${eq.last_borrow_date ? new Date(eq.last_borrow_date).toLocaleDateString('en-PH') : 'Never'}</td>
+      </tr>
+    `).join('');
+
+  return `
+    <div style="font-family:Arial,sans-serif;color:#333;line-height:1.6;">
+      <!-- Header -->
+      <div style="text-align:center;margin-bottom:20px;border-bottom:2px solid #27ae60;padding-bottom:12px;">
+        <h1 style="margin:0 0 4px 0;font-size:22px;color:#27ae60;">EQUILAB Inventory Audit Report</h1>
+        <p style="margin:0;font-size:13px;color:#666;">Comprehensive Equipment Inventory Assessment</p>
+      </div>
+
+      <!-- Audit Info -->
+      <table style="width:100%;margin-bottom:16px;font-size:11px;">
+        <tr>
+          <td style="padding:4px 8px;font-weight:600;width:30%;">Audit ID:</td>
+          <td style="padding:4px 8px;">${escHtml(auditData.audit_id || 'N/A')}</td>
+          <td style="padding:4px 8px;font-weight:600;width:30%;">Admin Name:</td>
+          <td style="padding:4px 8px;">${escHtml(auditData.admin_name || 'N/A')}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 8px;font-weight:600;">Audit Date:</td>
+          <td style="padding:4px 8px;">${auditDate}</td>
+          <td style="padding:4px 8px;font-weight:600;">Status:</td>
+          <td style="padding:4px 8px;">${escHtml(auditData.status || 'N/A')}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 8px;font-weight:600;">Generated:</td>
+          <td style="padding:4px 8px;">${generatedDate} ${generatedTime}</td>
+          <td style="padding:4px 8px;font-weight:600;">Period:</td>
+          <td style="padding:4px 8px;">Last 6 Months</td>
+        </tr>
+      </table>
+
+      <!-- Summary Statistics -->
+      <div style="margin-bottom:16px;">
+        <h2 style="font-size:14px;font-weight:600;margin:0 0 8px 0;border-bottom:1px solid #27ae60;padding-bottom:4px;">Summary Statistics</h2>
+        <table style="width:100%;font-size:11px;">
+          <tr style="background:#f9f9f9;">
+            <td style="padding:8px;border:1px solid #ddd;font-weight:600;text-align:center;width:25%;">Total Items</td>
+            <td style="padding:8px;border:1px solid #ddd;font-weight:600;text-align:center;width:25%;color:#27ae60;">Complete</td>
+            <td style="padding:8px;border:1px solid #ddd;font-weight:600;text-align:center;width:25%;color:#e74c3c;">Missing</td>
+            <td style="padding:8px;border:1px solid #ddd;font-weight:600;text-align:center;width:25%;color:#f39c12;">Damaged</td>
+          </tr>
+          <tr style="background:#fff;">
+            <td style="padding:8px;border:1px solid #ddd;text-align:center;font-size:16px;font-weight:600;">${statsTotal}</td>
+            <td style="padding:8px;border:1px solid #ddd;text-align:center;font-size:16px;font-weight:600;color:#27ae60;">${completeCount}</td>
+            <td style="padding:8px;border:1px solid #ddd;text-align:center;font-size:16px;font-weight:600;color:#e74c3c;">${missingCount}</td>
+            <td style="padding:8px;border:1px solid #ddd;text-align:center;font-size:16px;font-weight:600;color:#f39c12;">${damagedCount}</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Most Borrowed Equipment -->
+      <div style="margin-bottom:16px;page-break-inside:avoid;">
+        <h2 style="font-size:14px;font-weight:600;margin:0 0 8px 0;border-bottom:1px solid #27ae60;padding-bottom:4px;">Most Borrowed Equipment (Last 6 Months)</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:8px;">
+          <thead>
+            <tr style="background:#27ae60;color:#fff;">
+              <th style="padding:6px 8px;text-align:center;font-weight:600;">Rank</th>
+              <th style="padding:6px 8px;text-align:left;font-weight:600;">Equipment Name</th>
+              <th style="padding:6px 8px;text-align:center;font-weight:600;">ID</th>
+              <th style="padding:6px 8px;text-align:center;font-weight:600;">Frequency</th>
+              <th style="padding:6px 8px;text-align:center;font-weight:600;">Available</th>
+              <th style="padding:6px 8px;text-align:center;font-weight:600;">Last Borrowed</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${mostBorrowedRows}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Complete Equipment Inventory -->
+      <div style="page-break-inside:avoid;">
+        <h2 style="font-size:14px;font-weight:600;margin:0 0 8px 0;border-bottom:1px solid #27ae60;padding-bottom:4px;">Complete Equipment Inventory</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:9px;">
+          <thead>
+            <tr style="background:#27ae60;color:#fff;">
+              <th style="padding:5px 6px;text-align:left;font-weight:600;">ID</th>
+              <th style="padding:5px 6px;text-align:left;font-weight:600;">Equipment Name</th>
+              <th style="padding:5px 6px;text-align:center;font-weight:600;">Total</th>
+              <th style="padding:5px 6px;text-align:center;font-weight:600;">Available</th>
+              <th style="padding:5px 6px;text-align:center;font-weight:600;">Borrowed</th>
+              <th style="padding:5px 6px;text-align:center;font-weight:600;">Last Borrowed</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${equipmentRows}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Legend & Footer -->
+      <div style="margin-top:16px;padding-top:8px;border-top:1px solid #ddd;font-size:10px;color:#666;">
+        <p style="margin:4px 0;"><strong>Legend:</strong> Frequency = Number of times borrowed in last 6 months | Available = Current available quantity / Total quantity | Last Borrowed = Date of most recent borrow request</p>
+        <p style="margin:4px 0;color:#999;font-size:9px;">This report includes all equipment in the inventory, including items that have never been borrowed.</p>
+      </div>
+    </div>
+  `;
 }
 
 function closeAuditInterface() {
