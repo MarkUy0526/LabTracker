@@ -1060,6 +1060,9 @@ function clearHistoryFilter() {
 // ════════════════════════════════════════════════════════════════
 function openAddEquipmentModal() {
   document.getElementById('addEquipmentModal').classList.add('is-open');
+  hideEquipmentError();
+  clearImagePreview();
+  autoGenerateEquipmentID();
 }
 function closeAddEquipmentModal() {
   document.getElementById('addEquipmentModal').classList.remove('is-open');
@@ -1480,13 +1483,13 @@ function validateInventoryValues(values, requireId = false) {
   if (!equipmentName) return { valid: false, message: 'Equipment Name is required.' };
   if (!accountablePerson) return { valid: false, message: 'Accountable Person is required.' };
   if (totalQty === null || workingQty === null || notWorkingQty === null || maintenanceQty === null) {
-    return { valid: false, message: 'Total, Working, Non-working, and Maintenance must be whole numbers.' };
+    return { valid: false, message: 'Equipment quantities cannot be less than zero.' };
   }
   if ((workingQty + notWorkingQty + maintenanceQty) !== totalQty) {
-    return { valid: false, message: 'Working + Non-working + Maintenance must equal Total Qty.' };
+    return { valid: false, message: `Total quantity must equal Working (${workingQty}) + Not Working (${notWorkingQty}) + Maintenance (${maintenanceQty}) = ${workingQty + notWorkingQty + maintenanceQty}, but Total is ${totalQty}.` };
   }
   if (workingQty === 0 && notWorkingQty === 0 && maintenanceQty === 0) {
-    return { valid: false, message: 'Select at least one condition count.' };
+    return { valid: false, message: 'At least one quantity condition must be selected (cannot all be zero).' };
   }
   return { valid: true, totalQty, workingQty, notWorkingQty, maintenanceQty };
 }
@@ -1500,6 +1503,73 @@ function validateEquipmentDetails(values, requireId = false) {
   if (!equipmentName) return { valid: false, message: 'Equipment Name is required.' };
   if (!accountablePerson) return { valid: false, message: 'Accountable Person is required.' };
   return { valid: true };
+}
+
+function generateNextEquipmentID(prefix = 'E') {
+  let maxNum = 0;
+  currentEquipmentIDs.forEach(id => {
+    if (id.startsWith(prefix + '-')) {
+      const numPart = parseInt(id.substring(2), 10);
+      if (!isNaN(numPart) && numPart > maxNum) maxNum = numPart;
+    }
+  });
+  const nextNum = maxNum + 1;
+  return prefix + '-' + String(nextNum).padStart(3, '0');
+}
+
+function autoGenerateEquipmentID() {
+  const categorySelect = document.getElementById('equipmentCategory');
+  const idInput = document.getElementById('equipmentID');
+  const customBtn = document.getElementById('useCustomIDBtn');
+  if (!categorySelect || !idInput || !customBtn) return;
+
+  const prefix = categorySelect.value;
+  const newID = generateNextEquipmentID(prefix);
+  idInput.value = newID;
+  idInput.readOnly = true;
+  idInput.style.opacity = '0.7';
+  idInput.style.cursor = 'not-allowed';
+  customBtn.textContent = 'Custom';
+  customBtn.onclick = toggleCustomID;
+  updateAddEquipmentSaveState();
+}
+
+function toggleCustomID() {
+  const idInput = document.getElementById('equipmentID');
+  const customBtn = document.getElementById('useCustomIDBtn');
+  if (!idInput || !customBtn) return;
+
+  if (idInput.readOnly) {
+    idInput.readOnly = false;
+    idInput.style.opacity = '1';
+    idInput.style.cursor = 'text';
+    idInput.value = '';
+    customBtn.textContent = 'Auto';
+    customBtn.onclick = () => { autoGenerateEquipmentID(); };
+  } else {
+    autoGenerateEquipmentID();
+  }
+  updateAddEquipmentSaveState();
+}
+
+function clearImagePreview() {
+  const fileInput = document.getElementById('equipmentImageInput');
+  const preview = document.getElementById('imagePreview');
+  if (fileInput) fileInput.value = '';
+  if (preview) preview.style.display = 'none';
+}
+
+function showEquipmentError(message) {
+  const errorMsg = document.getElementById('equipmentErrorMsg');
+  if (!errorMsg) return;
+  errorMsg.textContent = message;
+  errorMsg.style.display = 'block';
+}
+
+function hideEquipmentError() {
+  const errorMsg = document.getElementById('equipmentErrorMsg');
+  if (!errorMsg) return;
+  errorMsg.style.display = 'none';
 }
 
 function setButtonDisabledState(btn, disabled) {
@@ -2421,10 +2491,41 @@ document.addEventListener('DOMContentLoaded', () => {
       el.addEventListener('input', updateAddEquipmentSaveState);
       el.addEventListener('change', updateAddEquipmentSaveState);
     });
+
+  // Category select listener for auto-ID generation
+  const categorySelect = document.getElementById('equipmentCategory');
+  if (categorySelect) {
+    categorySelect.addEventListener('change', autoGenerateEquipmentID);
+  }
+
+  // Image input listener for preview
+  const imageInput = document.getElementById('equipmentImageInput');
+  if (imageInput) {
+    imageInput.addEventListener('change', function() {
+      const file = this.files?.[0];
+      if (!file) return;
+
+      const preview = document.getElementById('imagePreview');
+      const previewImg = document.getElementById('previewImg');
+      const previewFileName = document.getElementById('previewFileName');
+      if (!preview || !previewImg || !previewFileName) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        previewImg.src = e.target.result;
+        previewFileName.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+        preview.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   updateAddEquipmentSaveState();
 
   document.getElementById('submitEquipmentBtn').onclick = function(e) {
     e.preventDefault();
+    hideEquipmentError();
+
     const equipmentID       = document.getElementById('equipmentID').value.trim();
     const equipmentName     = document.getElementById('equipmentName').value.trim();
     const serialNumber      = document.getElementById('serialNumber').value.trim();
@@ -2436,6 +2537,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const description       = document.getElementById('description').value.trim();
     const accountablePerson = document.getElementById('accountablePerson').value.trim();
     const isBorrowable      = document.getElementById('borrowingStatus')?.value || '1';
+    const imageFile         = document.getElementById('equipmentImageInput')?.files?.[0];
 
     const validation = validateInventoryValues({
       equipmentID,
@@ -2446,57 +2548,112 @@ document.addEventListener('DOMContentLoaded', () => {
       notWorkingQty,
       maintenanceQty
     }, true);
-    if (!validation.valid) { alert(validation.message); return; }
-    if (currentEquipmentIDs.has(equipmentID)) {
-      alert('Equipment ID already exists. Please use a unique ID.'); return;
+
+    if (!validation.valid) {
+      showEquipmentError(validation.message);
+      return;
     }
+
+    if (currentEquipmentIDs.has(equipmentID)) {
+      showEquipmentError('Equipment ID already exists. Please use a different ID or choose another category.');
+      return;
+    }
+
+    if (imageFile) {
+      const maxSize = 5 * 1024 * 1024;
+      if (imageFile.size > maxSize) {
+        showEquipmentError(`File must be under 5MB. Current file size: ${(imageFile.size / 1024 / 1024).toFixed(2)}MB`);
+        return;
+      }
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(imageFile.type)) {
+        showEquipmentError('Only JPG, PNG, and WebP images are allowed.');
+        return;
+      }
+    }
+
     if (!confirmRiskyInventoryUpdate(0, validation.notWorkingQty)) return;
 
     $.ajax({
       url: 'add_equipment.php', method: 'POST',
       data: { equipmentID, equipmentName, serialNumber, internalSN,
               totalQty, workingQty, notWorkingQty, maintenanceQty, description, accountablePerson, isBorrowable },
-      // FIX: removed dataType:'json' to avoid false error triggers
       success: function(rawData) {
         let data;
         try { data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData; }
         catch(e) { data = { success: false, message: 'Invalid response' }; }
 
         if (data.success) {
-          showInventoryFeedback(buildInventoryUpdateMessage(equipmentName, 0, validation.notWorkingQty));
-          closeAddEquipmentModal();
+          // Equipment added successfully, now upload image if provided
+          if (imageFile) {
+            const formData = new FormData();
+            formData.append('equipment_id', equipmentID);
+            formData.append('photo', imageFile);
 
-          // ── Record to history log with PH timestamp ──
-          saveEquipmentLog({
-            equipment_id:    equipmentID,
-            equipment_name:  equipmentName,
-            total_qty:       totalQty,
-            working_qty:     workingQty,
-            not_working_qty: notWorkingQty,
-            account_person:  accountablePerson
-          }, 'Added');
+            $.ajax({
+              url: 'upload_equipment_image.php',
+              method: 'POST',
+              data: formData,
+              processData: false,
+              contentType: false,
+              success: function(imgData) {
+                try { imgData = typeof imgData === 'string' ? JSON.parse(imgData) : imgData; }
+                catch(e) { imgData = { success: false }; }
 
-          selectedRow = null; selectedItemData = null;
-          ['equipmentID','equipmentName','serialNumber','internalSN','totalQty',
-           'workingQty','notWorkingQty','maintenanceQty','description','accountablePerson']
-            .forEach(id => { document.getElementById(id).value = ''; });
-          const borrowingStatus = document.getElementById('borrowingStatus');
-          if (borrowingStatus) borrowingStatus.value = '1';
-
-          // FIX 3: reload inventory immediately so new equipment shows without page refresh
-          loadInventory();
-          loadInventoryPreview();
-          updateAddEquipmentSaveState();
+                if (imgData.success) {
+                  showInventoryFeedback(buildInventoryUpdateMessage(equipmentName, 0, validation.notWorkingQty) + ' with image');
+                } else {
+                  showInventoryFeedback(buildInventoryUpdateMessage(equipmentName, 0, validation.notWorkingQty) + ' (image upload failed)');
+                }
+                closeAddEquipmentModal();
+                finishAddEquipment(equipmentID, equipmentName, validation);
+              },
+              error: function() {
+                showInventoryFeedback(buildInventoryUpdateMessage(equipmentName, 0, validation.notWorkingQty) + ' (image upload failed)');
+                closeAddEquipmentModal();
+                finishAddEquipment(equipmentID, equipmentName, validation);
+              }
+            });
+          } else {
+            showInventoryFeedback(buildInventoryUpdateMessage(equipmentName, 0, validation.notWorkingQty));
+            closeAddEquipmentModal();
+            finishAddEquipment(equipmentID, equipmentName, validation);
+          }
         } else {
-          alert('Error: ' + (data.message || 'Unknown error'));
+          showEquipmentError('Error: ' + (data.message || 'Unknown error occurred while adding equipment'));
         }
       },
       error: function(xhr) {
         console.error('add_equipment.php error:', xhr.status, xhr.responseText);
-        alert('Add failed. Check console for details.');
+        showEquipmentError('Failed to add equipment. Please try again.');
       }
     });
   };
+
+  function finishAddEquipment(equipmentID, equipmentName, validation) {
+    // Record to history log with PH timestamp
+    saveEquipmentLog({
+      equipment_id:    equipmentID,
+      equipment_name:  equipmentName,
+      total_qty:       validation.totalQty,
+      working_qty:     validation.workingQty,
+      not_working_qty: validation.notWorkingQty,
+      account_person:  document.getElementById('accountablePerson').value.trim()
+    }, 'Added');
+
+    selectedRow = null; selectedItemData = null;
+    ['equipmentID','equipmentName','serialNumber','internalSN','totalQty',
+     'workingQty','notWorkingQty','maintenanceQty','description','accountablePerson']
+      .forEach(id => { document.getElementById(id).value = ''; });
+    const borrowingStatus = document.getElementById('borrowingStatus');
+    if (borrowingStatus) borrowingStatus.value = '1';
+    clearImagePreview();
+    autoGenerateEquipmentID();
+
+    loadInventory();
+    loadInventoryPreview();
+    updateAddEquipmentSaveState();
+  }
 
   // ── DELETE ──
   document.getElementById('deleteEquipmentBtn').onclick = function() {

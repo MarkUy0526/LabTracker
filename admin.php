@@ -1040,8 +1040,31 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
     <div class="modal-content" style="position:relative;max-width:500px;">
       <span class="close" onclick="closeAddEquipmentModal()">&times;</span>
       <h2 id="equipmentModalTitle">Add Equipment</h2>
+
+      <!-- Category Legend -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 12px;font-size:11px;color:var(--text-2);">
+        <span style="font-weight:600;color:var(--text-1);">ID Prefix:</span>
+        <span><strong style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:3px;border-radius:5px;background:var(--bg);color:var(--accent);font-family:var(--mono);font-size:10px;font-weight:700;">E</strong> Equipment</span>
+        <span><strong style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:3px;border-radius:5px;background:var(--bg);color:var(--accent);font-family:var(--mono);font-size:10px;font-weight:700;">M</strong> Measuring</span>
+        <span><strong style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:3px;border-radius:5px;background:var(--bg);color:var(--accent);font-family:var(--mono);font-size:10px;font-weight:700;">C</strong> Chemicals</span>
+        <span><strong style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;margin-right:3px;border-radius:5px;background:var(--bg);color:var(--accent);font-family:var(--mono);font-size:10px;font-weight:700;">B</strong> Books</span>
+      </div>
+
+      <label>Category</label>
+      <select id="equipmentCategory" style="margin-bottom:12px;">
+        <option value="E">Equipment</option>
+        <option value="M">Measuring Tools</option>
+        <option value="C">Chemicals</option>
+        <option value="B">Books</option>
+      </select>
+
       <label>Equipment ID</label>
-      <input type="text" id="equipmentID" required />
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <input type="text" id="equipmentID" required style="flex:1;" />
+        <button type="button" id="useCustomIDBtn" style="background:var(--surface-2);border:1px solid var(--border);padding:8px 12px;border-radius:var(--radius);font-size:12px;color:var(--text-2);cursor:pointer;white-space:nowrap;">Custom</button>
+      </div>
+      <p id="equipmentIDHint" style="font-size:11px;color:var(--text-3);margin-top:-8px;margin-bottom:8px;">Auto-generated based on category</p>
+
       <label>Equipment Name</label>
       <input type="text" id="equipmentName" required />
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -1056,13 +1079,28 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
         <option value="0">Restricted / Hidden from Borrower Side</option>
       </select>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
-        <div><label>Total Qty</label><input type="number" id="totalQty" /></div>
-        <div><label>Working</label><input type="number" id="workingQty" /></div>
-        <div><label>Not Working</label><input type="number" id="notWorkingQty" /></div>
-        <div><label>Maintenance</label><input type="number" id="maintenanceQty" /></div>
+        <div><label>Total Qty</label><input type="number" id="totalQty" min="0" step="1" /></div>
+        <div><label>Working</label><input type="number" id="workingQty" min="0" step="1" /></div>
+        <div><label>Not Working</label><input type="number" id="notWorkingQty" min="0" step="1" /></div>
+        <div><label>Maintenance</label><input type="number" id="maintenanceQty" min="0" step="1" /></div>
       </div>
+
+      <label>Equipment Image (Optional)</label>
+      <div style="margin-bottom:12px;">
+        <input type="file" id="equipmentImageInput" accept="image/jpeg,image/png,image/webp" style="display:none;" />
+        <button type="button" id="uploadImageBtn" onclick="document.getElementById('equipmentImageInput').click();" style="background:var(--surface-2);border:1px solid var(--border);padding:8px 12px;border-radius:var(--radius);font-size:12px;color:var(--text-2);cursor:pointer;width:100%;text-align:left;">📷 Choose Image</button>
+        <div id="imagePreview" style="margin-top:8px;display:none;">
+          <img id="previewImg" style="max-width:100%;max-height:120px;border-radius:var(--radius);border:1px solid var(--border);" />
+          <p id="previewFileName" style="font-size:11px;color:var(--text-3);margin-top:4px;"></p>
+          <button type="button" id="removeImageBtn" onclick="clearImagePreview()" style="background:var(--danger);color:#fff;border:none;padding:4px 8px;border-radius:4px;font-size:11px;margin-top:4px;cursor:pointer;">Remove</button>
+        </div>
+      </div>
+
       <label>Description</label>
       <textarea id="description"></textarea>
+
+      <p id="equipmentErrorMsg" style="color:var(--danger);font-size:12px;margin-top:8px;display:none;"></p>
+
       <button id="submitEquipmentBtn" style="width:100%;margin-top:16px;padding:10px;justify-content:center;">Submit</button>
     </div>
   </div>
