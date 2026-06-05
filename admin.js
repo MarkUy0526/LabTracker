@@ -1302,7 +1302,7 @@ function updateEquipmentCondition(input) {
   if (!equipmentID || !field) return;
   if (nextValue === null) {
     input.value = previousValue;
-    alert('Condition quantity must be a whole number.');
+    showErrorFeedback('Condition quantity must be a whole number (cannot be negative).');
     return;
   }
   if (previousValue === nextValue) return;
@@ -1333,7 +1333,7 @@ function updateEquipmentCondition(input) {
     })
     .catch(err => {
       input.value = previousValue;
-      alert(err.message || 'Condition quantity update failed.');
+      showErrorFeedback(err.message || 'Failed to update condition quantity. Please try again.');
     })
     .finally(() => {
       input.disabled = false;
@@ -1587,6 +1587,33 @@ function showInventoryFeedback(message) {
     toast.style.cssText = `
       position:fixed;right:28px;bottom:88px;z-index:1400;
       background:var(--accent);color:#fff;border-radius:var(--radius);
+      padding:10px 14px;box-shadow:0 8px 28px rgba(0,0,0,.18);
+      font-family:var(--font);font-size:13px;font-weight:600;
+      max-width:340px;opacity:0;transform:translateY(8px);
+      transition:opacity .18s ease, transform .18s ease;
+    `;
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  requestAnimationFrame(() => {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateY(0)';
+  });
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(8px)';
+  }, 3200);
+}
+
+function showErrorFeedback(message) {
+  let toast = document.getElementById('errorFeedbackToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'errorFeedbackToast';
+    toast.style.cssText = `
+      position:fixed;right:28px;bottom:88px;z-index:1400;
+      background:var(--danger);color:#fff;border-radius:var(--radius);
       padding:10px 14px;box-shadow:0 8px 28px rgba(0,0,0,.18);
       font-family:var(--font);font-size:13px;font-weight:600;
       max-width:340px;opacity:0;transform:translateY(8px);
@@ -2671,14 +2698,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── DELETE ──
   document.getElementById('deleteEquipmentBtn').onclick = function() {
-    if (!selectedItemData) { alert('Please select an equipment item to delete.'); return; }
+    if (!selectedItemData) { showErrorFeedback('Please select an equipment item to delete.'); return; }
     fetch('fetch_equipment.php')
       .then(r => r.json())
       .then(data => {
         const eq = data.find(e => e.equipment_id === selectedItemData.equipment_id);
-        if (!eq) { alert('Equipment not found.'); return; }
+        if (!eq) { showErrorFeedback('Equipment not found.'); return; }
         if (parseInt(eq.available) !== parseInt(eq.working_qty)) {
-          alert('This equipment is currently borrowed. It cannot be deleted.'); return;
+          showErrorFeedback('This equipment is currently borrowed. It cannot be deleted.'); return;
         }
         if (confirm('Are you sure you want to delete this equipment?')) {
           $.ajax({
@@ -2686,15 +2713,15 @@ document.addEventListener('DOMContentLoaded', () => {
             data: { equipmentID: selectedItemData.equipment_id },
             success: function(res) {
               if (res.success) {
-                alert('Equipment deleted successfully!');
+                showInventoryFeedback('Equipment deleted successfully!');
                 loadInventory(); loadInventoryPreview();
                 selectedRow = null; selectedItemData = null;
-              } else { alert('Error: ' + res.message); }
+              } else { showErrorFeedback('Error: ' + res.message); }
             }
           });
         }
       })
-      .catch(() => alert('Failed to fetch equipment data.'));
+      .catch(() => showErrorFeedback('Failed to fetch equipment data.'));
   };
 
   // ── EXPORT / IMPORT ──
