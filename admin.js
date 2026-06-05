@@ -2493,9 +2493,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
   // Category select listener for auto-ID generation
-  const categorySelect = document.getElementById('equipmentCategory');
-  if (categorySelect) {
-    categorySelect.addEventListener('change', autoGenerateEquipmentID);
+  const eqCategorySelect = document.getElementById('equipmentCategory');
+  if (eqCategorySelect) {
+    eqCategorySelect.addEventListener('change', autoGenerateEquipmentID);
   }
 
   // Image input listener for preview
