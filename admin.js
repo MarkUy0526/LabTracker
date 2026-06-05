@@ -1716,9 +1716,23 @@ function updateAddEquipmentSaveState() {
   const submitBtn = document.getElementById('submitEquipmentBtn');
   const validation = validateInventoryValues(getAddInventoryValues(), true);
   const duplicate = currentEquipmentIDs.has(getAddInventoryValues().equipmentID);
+
+  let errorMsg = '';
+  if (duplicate) {
+    errorMsg = 'Equipment ID already exists. Please use a different ID or choose another category.';
+  } else if (!validation.valid) {
+    errorMsg = validation.message;
+  }
+
+  if (errorMsg) {
+    showEquipmentError(errorMsg);
+  } else {
+    hideEquipmentError();
+  }
+
   setButtonDisabledState(submitBtn, !validation.valid || duplicate);
   if (submitBtn) {
-    submitBtn.title = duplicate ? 'Equipment ID already exists.' : (validation.valid ? '' : validation.message);
+    submitBtn.title = errorMsg;
   }
 }
 
