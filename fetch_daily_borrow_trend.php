@@ -24,7 +24,7 @@ if ($fromDt > $toDt) {
     exit;
 }
 
-$allowed = ['All', 'Accepted', 'Pending', 'Rejected'];
+$allowed = ['All', 'Approved', 'Pending', 'Denied'];
 if (!in_array($status, $allowed)) {
     echo json_encode(['success' => false, 'message' => 'Invalid status']);
     exit;

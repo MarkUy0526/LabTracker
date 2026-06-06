@@ -29,10 +29,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $conn->begin_transaction();
 
     try {
+        $status = 'Pending';
         $stmt = $conn->prepare("INSERT INTO borrow_requests
-            (guest_number, date, borrower_name, instructor_name, student_id, subject_code, usage_date, department, room)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("sssssssss", $guestNumber, $date, $borrowerName, $instructorName, $studentID, $subjectCode, $usageDate, $department, $room);
+            (guest_number, date, borrower_name, instructor_name, student_id, subject_code, usage_date, department, room, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("ssssssssss", $guestNumber, $date, $borrowerName, $instructorName, $studentID, $subjectCode, $usageDate, $department, $room, $status);
 
         if (!$stmt->execute()) {
             throw new Exception('Failed to insert borrower data: ' . $stmt->error);

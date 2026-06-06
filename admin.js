@@ -1992,6 +1992,8 @@ function initReportsControls() {
       setReportsPage(totalPages);
     }
   });
+
+  document.getElementById('generateSummaryPdfBtn')?.addEventListener('click', generateSummaryReportPdf);
 }
 
 document.addEventListener('DOMContentLoaded', initReportsControls);
@@ -2012,10 +2014,107 @@ function getReportSearchText(entry) {
     req.department,
     req.room,
     req.status,
+    req.return_verification_status,
+    req.return_submitted_at,
     req.usage_date,
     req.date,
     equipment
   ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function buildReturnVerificationBadge(status) {
+  const value = status || 'Pending Verification';
+  const styles = {
+    'Pending Verification': { bg: 'rgba(255, 152, 0, 0.12)', color: '#b26a00' },
+    'Verified': { bg: 'var(--accent-soft)', color: 'var(--accent)' },
+    'Return Issue Detected': { bg: 'var(--danger-soft)', color: 'var(--danger)' }
+  };
+  const style = styles[value] || styles['Pending Verification'];
+  return `<span style="background:${style.bg};color:${style.color};font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;">${escHtml(value)}</span>`;
+}
+
+function buildReturnVerificationOptions(selected) {
+  return ['Pending Verification', 'Verified', 'Return Issue Detected'].map(status => {
+    return `<option value="${escHtml(status)}"${status === selected ? ' selected' : ''}>${escHtml(status)}</option>`;
+  }).join('');
+}
+
+function buildRequestStatusBadge(status) {
+  const value = status || 'Pending';
+  const styles = {
+    Approved: { bg: 'rgba(76, 175, 80, 0.14)', color: '#2e7d32' },
+    Pending: { bg: 'rgba(255, 193, 7, 0.20)', color: '#9a6a00' },
+    Denied: { bg: 'rgba(244, 67, 54, 0.14)', color: '#c62828' }
+  };
+  const style = styles[value] || styles.Pending;
+  return `<span style="display:inline-block;background:${style.bg};color:${style.color};font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;">${escHtml(value)}</span>`;
+}
+
+function returnRemarksIndicateIssue(remarks) {
+  const value = String(remarks || '').toLowerCase();
+  return ['lost', 'not working', 'incomplete', 'issue'].some(token => value.includes(token));
+}
+
+function getReportReturnStatus(req, eqList) {
+  if (req.return_status) return req.return_status;
+  const equipment = eqList || [];
+  if (!equipment.length) return '-';
+
+  const allReturned = equipment.every(eq => !!eq.returned_on && !returnRemarksIndicateIssue(eq.remarks));
+  if (allReturned) return 'Returned';
+
+  const hasIssue = equipment.some(eq => returnRemarksIndicateIssue(eq.remarks));
+  if (hasIssue) return 'Not Returned';
+
+  const usageDate = String(req.usage_date || '').split(/[T\s]/)[0];
+  const today = new Date().toISOString().slice(0, 10);
+  if (usageDate && usageDate < today && equipment.some(eq => !eq.returned_on)) {
+    return 'Not Returned';
+  }
+
+  return '-';
+}
+
+function buildReturnStatusBadge(status) {
+  if (!status || status === '-') return '<span style="color:var(--text-3);font-size:12px;">-</span>';
+  const isReturned = status === 'Returned';
+  const bg = isReturned ? 'var(--accent-soft)' : 'var(--danger-soft)';
+  const color = isReturned ? 'var(--accent)' : 'var(--danger)';
+  return `<span style="display:inline-block;background:${bg};color:${color};font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;">${escHtml(status)}</span>`;
+}
+
+function getRemarksSummary(eqList) {
+  const remarks = (eqList || [])
+    .map(eq => String(eq.remarks || '').trim())
+    .filter(Boolean);
+  return remarks.length ? [...new Set(remarks)].join(', ') : '-';
+}
+
+function getEquipmentSummary(eqList) {
+  return (eqList || [])
+    .map(eq => `${eq.equipment_name} (${eq.quantity})`)
+    .join(', ') || '-';
+}
+
+function buildPdfSignatoriesSection() {
+  return `
+    <div style="margin-top: 30px;">
+      <div style="font-weight:700;margin-bottom:12px;">Signatories</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <tr>
+          <td style="width:33%;padding:24px 10px 8px;text-align:center;border-bottom:1px solid #000;">Borrower</td>
+          <td style="width:33%;padding:24px 10px 8px;text-align:center;border-bottom:1px solid #000;">Instructor</td>
+          <td style="width:33%;padding:24px 10px 8px;text-align:center;border-bottom:1px solid #000;">Laboratory Custodian</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 10px;text-align:center;">Signature over Printed Name</td>
+          <td style="padding:6px 10px;text-align:center;">Signature over Printed Name</td>
+          <td style="padding:6px 10px;text-align:center;">Verified / Received By</td>
+        </tr>
+      </table>
+      <div style="margin-top:18px;">${buildHiromiApprovalBlock(false)}</div>
+    </div>
+  `;
 }
 
 function applyReportsFilters(resetPage = false) {
@@ -2099,14 +2198,17 @@ function renderReportCard(entry) {
   const req = entry.borrowRequest;
   const eqList = entry.equipmentList || [];
   const reqId = req.id;
-  const isAccepted = req.status === 'Accepted';
-  const statusColor = isAccepted ? 'var(--accent)' : 'var(--danger)';
-  const statusBg = isAccepted ? 'var(--accent-soft)' : 'var(--danger-soft)';
+  const isApproved = req.status === 'Approved';
+  const verificationStatus = req.return_verification_status || 'Pending Verification';
+  const hasReturnPhoto = !!req.return_photo_path;
+  const submittedAt = req.return_submitted_at ? formatDateToDDMMYYYY(req.return_submitted_at) : '-';
+  const defaultReturnDate = hasReturnPhoto && req.return_submitted_at ? String(req.return_submitted_at).split(/[T\s]/)[0] : '';
+  const returnStatus = getReportReturnStatus(req, eqList);
 
   const eqRows = eqList.map(eq => {
-    const returnedVal = eq.returned_on || '';
+    const returnedVal = eq.returned_on || defaultReturnDate;
     const remarksVal = eq.remarks || '';
-    if (isAccepted) {
+    if (isApproved) {
       return `
         <tr data-eq-name="${escHtml(eq.equipment_name)}">
           <td style="padding:6px 10px;border-bottom:1px solid var(--border);">${escHtml(eq.equipment_name)}</td>
@@ -2129,6 +2231,35 @@ function renderReportCard(entry) {
       </tr>`;
   }).join('');
 
+  const returnVerificationHtml = isApproved ? `
+    <div class="return-verification-panel" style="border:1px solid var(--border);background:var(--surface-2);border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+        <div>
+          <div style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Return Photo Submission</div>
+          <div style="font-size:12px;color:var(--text-2);">Submitted: ${escHtml(submittedAt)}</div>
+        </div>
+        ${buildReturnVerificationBadge(verificationStatus)}
+      </div>
+      ${hasReturnPhoto ? `
+        <div style="display:grid;grid-template-columns:160px 1fr;gap:12px;align-items:start;">
+          <a href="${escHtml(req.return_photo_path)}" target="_blank" rel="noopener">
+            <img src="${escHtml(req.return_photo_path)}" alt="Borrower return photo" style="display:block;width:160px;height:120px;object-fit:cover;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
+          </a>
+          <div style="display:grid;gap:8px;">
+            <label style="font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Verification Status</label>
+            <select class="return-verification-select" style="font-family:var(--font);font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-1);max-width:260px;">
+              ${buildReturnVerificationOptions(verificationStatus)}
+            </select>
+            <textarea class="return-verification-notes" rows="2" placeholder="Verification notes"
+              style="font-family:var(--font);font-size:12px;padding:7px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text-1);resize:vertical;">${escHtml(req.return_verification_notes || '')}</textarea>
+          </div>
+        </div>
+      ` : `
+        <div style="font-size:12px;color:var(--text-3);">No return photo has been submitted by the borrower yet.</div>
+      `}
+    </div>
+  ` : '';
+
   const card = document.createElement('div');
   card.className = 'report-entry';
   card.dataset.reqId = reqId;
@@ -2139,11 +2270,11 @@ function renderReportCard(entry) {
         <span style="color:var(--text-3);font-size:12px;margin-left:8px;">Borrower #${escHtml(req.guest_number)}</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <span style="background:${statusBg};color:${statusColor};font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;">${escHtml(req.status)}</span>
-        <button class="downloadPdfBtn" data-req-id="${reqId}"
-          style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">PDF</button>
-        ${isAccepted ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
-          style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">Save Return Info</button>` : ''}
+        ${buildReturnStatusBadge(returnStatus)}
+        ${isApproved ? `<button class="downloadPdfBtn" data-req-id="${reqId}"
+          style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">Download PDF</button>` : ''}
+        ${isApproved ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
+          style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">Save</button>` : ''}
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;font-size:13px;color:var(--text-2);margin-bottom:12px;">
@@ -2154,7 +2285,9 @@ function renderReportCard(entry) {
       <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Room</span><br>${escHtml(req.room || '-')}</div>
       <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Usage Date</span><br>${formatDateToDDMMYYYY(req.usage_date)}</div>
       <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Request Date</span><br>${formatDateToDDMMYYYY(req.date)}</div>
+      <div><span style="color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.04em;">Return Status</span><br>${buildReturnStatusBadge(returnStatus)}</div>
     </div>
+    ${returnVerificationHtml}
     ${eqRows.length ? `
     <table style="width:100%;border-collapse:collapse;font-size:12px;" class="report-eq-table">
       <thead>
@@ -2171,10 +2304,23 @@ function renderReportCard(entry) {
   return card;
 }
 
-function updateReportsReturnInfo(reqId, returnedItems) {
+function updateReportsReturnInfo(reqId, returnedItems, returnStatus = null) {
   [reportsState.data, reportsState.filteredData].forEach(list => {
     const entry = list.find(item => item.borrowRequest?.id == reqId);
     if (!entry) return;
+    const card = document.querySelector(`.report-entry[data-req-id="${reqId}"]`);
+    const verificationStatus = card?.querySelector('.return-verification-select')?.value;
+    const verificationNotes = card?.querySelector('.return-verification-notes')?.value || '';
+    if (verificationStatus) {
+      entry.borrowRequest.return_verification_status = verificationStatus;
+      entry.borrowRequest.return_verification_notes = verificationNotes;
+      if (verificationStatus === 'Verified') {
+        entry.borrowRequest.return_verified_at = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      }
+    }
+    if (returnStatus) {
+      entry.borrowRequest.return_status = returnStatus;
+    }
     returnedItems.forEach(item => {
       const eq = (entry.equipmentList || []).find(e => e.equipment_name === item.equipment_name);
       if (eq) {
@@ -2209,6 +2355,8 @@ function wireReportCardControls(container) {
           remarks: getReturnRemarksValue(row)
         });
       });
+      const verificationStatus = card.querySelector('.return-verification-select')?.value || 'Pending Verification';
+      const verificationNotes = card.querySelector('.return-verification-notes')?.value || '';
 
       btn.disabled = true;
       btn.textContent = 'Saving...';
@@ -2216,32 +2364,38 @@ function wireReportCardControls(container) {
       fetch('update_return_info.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ borrow_request_id: reqId, returned_items: returnedItems })
+        body: JSON.stringify({
+          borrow_request_id: reqId,
+          returned_items: returnedItems,
+          verification_status: verificationStatus,
+          verification_notes: verificationNotes
+        })
       })
       .then(r => r.json())
       .then(res => {
         if (res.success) {
-          updateReportsReturnInfo(reqId, returnedItems);
+          updateReportsReturnInfo(reqId, returnedItems, res.return_status || null);
           btn.textContent = 'Saved';
           btn.style.background = 'var(--accent-soft)';
           btn.style.color = 'var(--accent)';
           btn.style.borderColor = 'var(--accent)';
           setTimeout(() => {
-            btn.textContent = 'Save Return Info';
+            btn.textContent = 'Save';
             btn.style.cssText = '';
             btn.disabled = false;
+            renderReportsPage();
           }, 2000);
         } else {
           alert('Save failed: ' + (res.message || 'Unknown error'));
           btn.disabled = false;
-          btn.textContent = 'Save Return Info';
+          btn.textContent = 'Save';
         }
       })
       .catch(err => {
         console.error('Save return info error:', err);
         alert('Network error saving return info.');
         btn.disabled = false;
-        btn.textContent = 'Save Return Info';
+        btn.textContent = 'Save';
       });
     });
   });
@@ -2277,6 +2431,8 @@ function wireReportCardControls(container) {
           </tr>
         `;
       }).join('');
+      const pdfReturnStatus = getReportReturnStatus(req, eqList);
+      const pdfRemarks = getRemarksSummary(eqList);
 
       const formHtml = `
         <div style="font-family: Arial, sans-serif; font-size: 12px; padding: 20px; max-width: 800px; margin: 0 auto;">
@@ -2292,6 +2448,8 @@ function wireReportCardControls(container) {
             <tr><td style="padding: 5px;"><strong>Student ID:</strong> ${escHtml(req.student_id || '-')}</td><td style="padding: 5px;"><strong>Subject Code:</strong> ${escHtml(req.subject_code || '-')}</td></tr>
             <tr><td style="padding: 5px;"><strong>Department:</strong> ${escHtml(req.department || '-')}</td><td style="padding: 5px;"><strong>Date(s) of Usage:</strong> ${formatDateToDDMMYYYY(req.usage_date)}</td></tr>
             <tr><td colspan="2" style="padding: 5px;"><strong>Room:</strong> ${escHtml(req.room || '-')}</td></tr>
+            <tr><td style="padding: 5px;"><strong>Request Status:</strong> ${escHtml(req.status || '-')}</td><td style="padding: 5px;"><strong>Return Status:</strong> ${escHtml(pdfReturnStatus)}</td></tr>
+            <tr><td colspan="2" style="padding: 5px;"><strong>Return Remarks:</strong> ${escHtml(pdfRemarks)}</td></tr>
           </table>
           <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #000;">
             <thead>
@@ -2309,9 +2467,7 @@ function wireReportCardControls(container) {
             <strong>Borrower's Declaration of Commitment:</strong><br/>
             <em>"I will be accountable to any damage incurred in the equipment and will return the equipment promptly and in the same working condition it was borrowed."</em>
           </div>
-          <table style="width: 100%; margin-top: 40px;">
-            <tr><td colspan="2" style="padding: 20px; text-align: left; vertical-align: top;">${buildHiromiApprovalBlock(false)}</td></tr>
-          </table>
+          ${buildPdfSignatoriesSection()}
         </div>
       `;
 
@@ -2327,13 +2483,86 @@ function wireReportCardControls(container) {
   });
 }
 
+function generateSummaryReportPdf() {
+  const approvedEntries = reportsState.data.filter(entry => entry.borrowRequest?.status === 'Approved');
+
+  if (!approvedEntries.length) {
+    alert('No approved borrowing transactions available for summary export.');
+    return;
+  }
+
+  const rows = approvedEntries.map((entry, index) => {
+    const req = entry.borrowRequest || {};
+    const eqList = entry.equipmentList || [];
+    const returnedDates = [...new Set(eqList.map(eq => eq.returned_on).filter(Boolean).map(formatDateToDDMMYYYY))];
+    const dateReturned = returnedDates.length ? returnedDates.join(', ') : '-';
+    const returnStatus = getReportReturnStatus(req, eqList);
+
+    return `
+      <tr>
+        <td style="border:1px solid #000;padding:6px;text-align:center;">${index + 1}</td>
+        <td style="border:1px solid #000;padding:6px;">${escHtml(req.borrower_name || '-')}</td>
+        <td style="border:1px solid #000;padding:6px;">${escHtml(getEquipmentSummary(eqList))}</td>
+        <td style="border:1px solid #000;padding:6px;">${formatDateToDDMMYYYY(req.date)}</td>
+        <td style="border:1px solid #000;padding:6px;">${dateReturned}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:center;">${escHtml(req.status || '-')}</td>
+        <td style="border:1px solid #000;padding:6px;text-align:center;">${escHtml(returnStatus)}</td>
+        <td style="border:1px solid #000;padding:6px;">${escHtml(getRemarksSummary(eqList))}</td>
+      </tr>
+    `;
+  }).join('');
+
+  const generatedAt = new Date().toLocaleString();
+  const formHtml = `
+    <div style="font-family: Arial, sans-serif; font-size: 11px; padding: 18px; color:#000;">
+      <div style="text-align:center;margin-bottom:16px;">
+        <h3 style="margin:3px 0;">EULOGIO "AMANG" RODRIGUEZ INSTITUTE OF SCIENCE AND TECHNOLOGY</h3>
+        <h3 style="margin:3px 0;">COLLEGE OF ARTS AND SCIENCES</h3>
+        <h3 style="margin:3px 0;">APPLIED PHYSICS DEPARTMENT</h3>
+        <h2 style="margin:10px 0;">Approved Borrowing Transactions Summary Report</h2>
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+        <tr>
+          <td style="padding:4px;"><strong>Total Number of Approved Requests:</strong> ${approvedEntries.length}</td>
+          <td style="padding:4px;text-align:right;"><strong>Generated:</strong> ${escHtml(generatedAt)}</td>
+        </tr>
+      </table>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #000;">
+        <thead>
+          <tr style="background:#f0f0f0;">
+            <th style="border:1px solid #000;padding:6px;">#</th>
+            <th style="border:1px solid #000;padding:6px;text-align:left;">Borrower Name</th>
+            <th style="border:1px solid #000;padding:6px;text-align:left;">Equipment Borrowed</th>
+            <th style="border:1px solid #000;padding:6px;text-align:left;">Date Borrowed</th>
+            <th style="border:1px solid #000;padding:6px;text-align:left;">Date Returned</th>
+            <th style="border:1px solid #000;padding:6px;">Request Status</th>
+            <th style="border:1px solid #000;padding:6px;">Return Status</th>
+            <th style="border:1px solid #000;padding:6px;text-align:left;">Remarks</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      ${buildPdfSignatoriesSection()}
+    </div>
+  `;
+
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = formHtml;
+  html2pdf().set({
+    margin: [8, 8, 8, 8],
+    filename: `approved-borrowing-summary-${new Date().toISOString().slice(0, 10)}.pdf`,
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+  }).from(wrapper).save();
+}
+
 function renderReportsPage() {
   const container = document.getElementById('reportsList');
   if (!container) return;
   container.innerHTML = '';
 
   if (!reportsState.data.length) {
-    container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">No accepted or rejected requests yet.</div>';
+    container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">No approved or denied requests yet.</div>';
     updateReportsPagination();
     return;
   }
@@ -2533,6 +2762,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ── IMPORT: step 1 — preview ──
   let _pendingImportFile = null;
+  let _pendingImportBorrowedConflictCount = 0;
 
   document.getElementById('uploadExcelInput').addEventListener('change', function() {
     const file = this.files[0];
@@ -2619,22 +2849,41 @@ document.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('importPreviewModal');
     const tbody = document.getElementById('importPreviewBody');
     const meta  = document.getElementById('importPreviewMeta');
+    _pendingImportBorrowedConflictCount = Number(res.borrowed_conflict_count || 0);
 
     meta.textContent = `File: ${file.name} · ${res.rows.length} row(s) · ${res.new_count} new · ${res.dup_count} duplicate(s)`;
 
     const restrictedCount = res.rows.filter(row => parseInt(row.is_borrowable ?? 1, 10) !== 1).length;
     meta.textContent = `File: ${file.name} · ${res.rows.length} row(s) · ${res.new_count} new · ${res.dup_count} duplicate(s) · ${restrictedCount} restricted`;
 
+    if (meta) {
+      meta.textContent += ` · ${_pendingImportBorrowedConflictCount} borrowed conflict(s)`;
+    }
+
+    let borrowedWarning = document.getElementById('importBorrowedWarning');
+    if (!borrowedWarning) {
+      borrowedWarning = document.createElement('div');
+      borrowedWarning.id = 'importBorrowedWarning';
+      borrowedWarning.style.cssText = 'margin-top:10px;border:1px solid #f5c98a;background:var(--warn-soft);color:var(--text-1);border-radius:var(--radius);padding:10px 12px;font-size:12.5px;line-height:1.45;';
+      meta.parentElement.appendChild(borrowedWarning);
+    }
+    borrowedWarning.style.display = _pendingImportBorrowedConflictCount > 0 ? 'block' : 'none';
+    borrowedWarning.textContent = 'Active borrowing records have been detected. Borrowed quantities will be preserved and inventory values will be recalculated accordingly.';
+
     tbody.innerHTML = '';
     res.rows.forEach(row => {
       const isDup  = row.status === 'duplicate';
+      const hasBorrowedConflict = Number(row.current_borrowed_qty || 0) > 0;
       const badge  = isDup
         ? `<span style="font-size:10px;font-weight:600;color:var(--warn);background:var(--warn-soft);border:1px solid #f5c98a;padding:2px 7px;border-radius:10px;text-transform:uppercase;">Duplicate</span>`
         : `<span style="font-size:10px;font-weight:600;color:var(--accent);background:var(--accent-soft);border:1px solid #a8d5b5;padding:2px 7px;border-radius:10px;text-transform:uppercase;">New</span>`;
+      const safetyBadge = hasBorrowedConflict
+        ? `<div style="margin-top:5px;font-size:10px;font-weight:700;color:var(--danger);background:var(--danger-soft);border:1px solid #f2b8b5;padding:2px 7px;border-radius:10px;text-transform:uppercase;display:inline-block;">Borrowed: ${row.current_borrowed_qty}</div>`
+        : '';
       const tr = document.createElement('tr');
-      tr.style.background = isDup ? 'rgba(230,126,34,.06)' : '';
+      tr.style.background = hasBorrowedConflict ? 'rgba(244,67,54,.06)' : (isDup ? 'rgba(230,126,34,.06)' : '');
       tr.innerHTML = `
-        <td style="padding:7px 12px;border-bottom:1px solid var(--border);">${badge}</td>
+        <td style="padding:7px 12px;border-bottom:1px solid var(--border);">${badge}${safetyBadge}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11.5px;">${escHtml(row.equipment_id)}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);font-weight:500;">${escHtml(row.equipment_name)}</td>
         <td style="padding:7px 12px;border-bottom:1px solid var(--border);color:var(--text-3);">${escHtml(row.serial_number || '—')}</td>
@@ -2660,11 +2909,16 @@ document.addEventListener('DOMContentLoaded', () => {
   window.closeImportPreview = function() {
     document.getElementById('importPreviewModal').style.display = 'none';
     _pendingImportFile = null;
+    _pendingImportBorrowedConflictCount = 0;
   };
 
   // ── IMPORT: step 2 — confirm ──
   document.getElementById('confirmImportBtn').addEventListener('click', function() {
     if (!_pendingImportFile) return;
+    if (_pendingImportBorrowedConflictCount > 0) {
+      const proceed = confirm('Active borrowing records have been detected. Borrowed quantities will be preserved and inventory values will be recalculated accordingly.\n\nDo you still want to proceed with the import?');
+      if (!proceed) return;
+    }
     const btn  = this;
     const file = _pendingImportFile;   // capture before closeImportPreview nulls it
     btn.disabled    = true;
@@ -2893,6 +3147,7 @@ const sectionMap = {
   Schedule:          'scheduleSection',
   'Borrow Requests': 'queueSection',
   Inventory:         'inventorySection',
+  'Equipment Tracking': 'equipmentTrackingSection',
   Reports:           'reportsSection'
 };
 
@@ -2913,6 +3168,8 @@ function navigateToSection(sectionName) {
   } else if (sectionName === 'Inventory') {
     loadInventory();
     refreshHistTabCount();
+  } else if (sectionName === 'Equipment Tracking') {
+    loadEquipmentTracking();
   } else if (sectionName === 'Reports') {
     loadReports();
     moveScheduleSummaryToReports();
@@ -3018,14 +3275,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
       // Stat cards (top of dashboard)
       set('totalRequests',    s.total    || 0);
-      set('acceptedRequests', s.accepted || 0);
-      set('rejectedRequests', s.rejected || 0);
+      set('approvedRequests', s.approved || 0);
+      set('deniedRequests', s.denied || 0);
       set('pendingRequests',  s.pending  || 0);
 
       // Schedule slider panel
       set('totalReq2', s.total    || 0);
-      set('accReq2',   s.accepted || 0);
-      set('rejReq2',   s.rejected || 0);
+      set('accReq2',   s.approved || 0);
+      set('rejReq2',   s.denied || 0);
       set('penReq2',   s.pending  || 0);
     })
     .catch(err => console.error('fetch_borrow_stats error:', err));
@@ -3063,12 +3320,16 @@ function refreshCalendarStats(containerSelector = '#calendar') {
     fetch(`fetch_borrow_stats.php?date=${dateStr}`).then(r => r.json()).then(data => {
       if (!data.success) return;
       const s = data.stats;
-      if (!s.total && !s.accepted && !s.rejected && !s.pending) return;
+      const approved = Number(s.approved ?? s.accepted ?? 0);
+      const denied = Number(s.denied ?? s.rejected ?? 0);
+      const pending = Number(s.pending ?? 0);
+      const total = Number(s.total ?? (approved + denied + pending));
+      if (!total && !approved && !denied && !pending) return;
       const content = `<div class="custom-stats" style="font-size:.75em;margin-top:5px;line-height:1.2;">
-        <div style="font-weight:bold;margin-bottom:4px;">Total: ${s.total}</div>
-        <div style="color:green;">Accepted: ${s.accepted}</div>
-        <div style="color:red;">Rejected: ${s.rejected}</div>
-        <div style="color:orange;">Pending: ${s.pending}</div></div>`;
+        <div style="font-weight:bold;margin-bottom:4px;">Total: ${total}</div>
+        <div style="color:green;">Approved: ${approved}</div>
+        <div style="color:red;">Denied: ${denied}</div>
+        <div style="color:orange;">Pending: ${pending}</div></div>`;
       const frame = dayCell.querySelector('.fc-daygrid-day-frame');
       if (frame && !frame.querySelector('.custom-stats')) frame.insertAdjacentHTML('beforeend', content);
     });
@@ -3092,12 +3353,12 @@ function initScheduleCharts() {
     set('weekLabel',        `${fmt(sun)} - ${fmt(sat)}`);
     set('monthLabel',       new Date().toLocaleString('default', { month:'long', year:'numeric' }));
     set('weeklyTotal',      w.total);
-    set('weeklyAccepted',   w.accepted);
-    set('weeklyRejected',   w.rejected);
+    set('weeklyApproved',   w.approved);
+    set('weeklyDenied',   w.denied);
     set('weeklyTopItem',    w.topItem);
     set('monthlyTotal',     m.total);
-    set('monthlyAccepted',  m.accepted);
-    set('monthlyRejected',  m.rejected);
+    set('monthlyApproved',  m.approved);
+    set('monthlyDenied',  m.denied);
     set('monthlyTopItem',   m.topItem);
 
     function pie(id, title, acc, rej) {
@@ -3105,12 +3366,12 @@ function initScheduleCharts() {
       if (!ctx) return;
       new Chart(ctx, {
         type: 'doughnut',
-        data: { labels:['Accepted','Rejected'], datasets:[{ data:[acc, rej], backgroundColor:['#4CAF50','#F44336'] }] },
+        data: { labels:['Approved','Denied'], datasets:[{ data:[acc, rej], backgroundColor:['#4CAF50','#F44336'] }] },
         options: { responsive:true, plugins:{ title:{ display:true, text:title }, legend:{ position:'bottom' } } }
       });
     }
-    pie('weeklyChart',  'Weekly Requests',  w.accepted, w.rejected);
-    pie('monthlyChart', 'Monthly Requests', m.accepted, m.rejected);
+    pie('weeklyChart',  'Weekly Requests',  w.approved, w.denied);
+    pie('monthlyChart', 'Monthly Requests', m.approved, m.denied);
 
     const now       = new Date();
     const firstDay  = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -3182,9 +3443,9 @@ function loadTrendChart() {
       const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
       const statusColors = {
         All:      { border: cssVar('--chart-default'), bg: cssVar('--chart-default-soft') },
-        Accepted: { border: cssVar('--accent'),       bg: cssVar('--accent-soft')        },
+        Approved: { border: cssVar('--accent'),       bg: cssVar('--accent-soft')        },
         Pending:  { border: cssVar('--warn'),         bg: cssVar('--warn-soft')          },
-        Rejected: { border: cssVar('--danger'),       bg: cssVar('--danger-soft')        },
+        Denied: { border: cssVar('--danger'),       bg: cssVar('--danger-soft')        },
       };
       const color = statusColors[status] ?? statusColors.All;
 
@@ -3318,12 +3579,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       json.data.slice(0, 5).forEach(entry => {
         const req        = entry.borrowRequest;
-        const isAccepted = req.status === 'Accepted';
+        const isApproved = req.status === 'Approved';
         const li         = document.createElement('li');
         li.innerHTML = `
           <span style="font-weight:500;">${escHtml(req.borrower_name)}</span>
           <span style="float:right;font-size:11px;font-weight:600;
-            color:${isAccepted ? 'var(--accent)' : 'var(--danger)'};">
+            color:${isApproved ? 'var(--accent)' : 'var(--danger)'};">
             ${escHtml(req.status)}
           </span>`;
         listEl.appendChild(li);
@@ -3414,7 +3675,7 @@ function clearFilters() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  fetch('process_rejected_requests.php').then(r=>r.json()).then(data => {
+  fetch('process_denied_requests.php').then(r=>r.json()).then(data => {
     if (data.success) { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); }
   });
 });
@@ -3423,13 +3684,13 @@ function attachActionHandlers() {
   document.querySelectorAll('.accept-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (confirm('Are you sure you want to ACCEPT this borrow request?'))
-        addToReports(btn.dataset.id, 'Accepted').then(() => { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); });
+        addToReports(btn.dataset.id, 'Approved').then(() => { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); });
     });
   });
   document.querySelectorAll('.reject-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (confirm('Are you sure you want to REJECT this borrow request?'))
-        addToReports(btn.dataset.id, 'Rejected').then(() => { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); });
+        addToReports(btn.dataset.id, 'Denied').then(() => { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); });
     });
   });
   document.querySelectorAll('.view-request-btn').forEach(btn => {
@@ -3460,8 +3721,8 @@ function formatDateToDDMMYYYY(dateStr) {
 
 function buildReturnRemarksControl(remarksValue, quantity) {
   const qty = Number(quantity) || 0;
-  const options = ['Good Condition', 'Not Working','Lost','Disposed'];
-  if (qty > 1) options.push('Complete', 'Incomplete');
+  const options = ['Good Condition', 'Lost', 'Not Working', 'Incomplete Return', 'Other Return Issues'];
+  if (qty > 1) options.push('Complete');
 
   const saved = String(remarksValue || '').trim();
   const selectedStandard = options.find(option => option.toLowerCase() === saved.toLowerCase()) || '';
@@ -3529,7 +3790,7 @@ function loadBorrowRequestsAndUpdateCount() {
 }
 
 // ════════════════════════════════════════════════════════════════
-// REPORTS — load accepted / rejected requests with return info editing
+// REPORTS — load approved / denied requests with return info editing
 // ════════════════════════════════════════════════════════════════
 function loadReportsLegacy() {
   const container = document.getElementById('reportsList');
@@ -3541,7 +3802,7 @@ function loadReportsLegacy() {
     .then(json => {
       container.innerHTML = '';
       if (!json.success || !json.data.length) {
-        container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">No accepted or rejected requests yet.</div>';
+        container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">No approved or denied requests yet.</div>';
         return;
       }
       json.data.forEach(entry => {
@@ -3549,15 +3810,15 @@ function loadReportsLegacy() {
         const eqList = entry.equipmentList || [];
         const reqId  = req.id;
 
-        const isAccepted  = req.status === 'Accepted';
-        const statusColor = isAccepted ? 'var(--accent)'      : 'var(--danger)';
-        const statusBg    = isAccepted ? 'var(--accent-soft)' : 'var(--danger-soft)';
+        const isApproved  = req.status === 'Approved';
+        const statusColor = isApproved ? 'var(--accent)'      : 'var(--danger)';
+        const statusBg    = isApproved ? 'var(--accent-soft)' : 'var(--danger-soft)';
 
-        // Build editable equipment rows (only for Accepted)
+        // Build editable equipment rows (only for Approved)
         const eqRows = eqList.map((eq, idx) => {
           const returnedVal = eq.returned_on || '';
           const remarksVal  = eq.remarks     || '';
-          if (isAccepted) {
+          if (isApproved) {
             return `
             <tr data-eq-name="${escHtml(eq.equipment_name)}">
               <td style="padding:6px 10px;border-bottom:1px solid var(--border);">${escHtml(eq.equipment_name)}</td>
@@ -3596,9 +3857,9 @@ function loadReportsLegacy() {
                 style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">
                 ⬇ PDF
               </button>
-              ${isAccepted ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
+              ${isApproved ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
                 style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">
-                Save Return Info
+                Save
               </button>` : ''}
             </div>
           </div>
@@ -3627,7 +3888,7 @@ function loadReportsLegacy() {
         container.appendChild(card);
       });
 
-      // ── Wire Save Return Info buttons ──
+      // Wire Save buttons
       container.querySelectorAll('.return-remarks-select').forEach(select => {
         select.addEventListener('change', () => {
           const customInput = select.closest('td')?.querySelector('.return-remarks-other-input');
@@ -3668,21 +3929,21 @@ function loadReportsLegacy() {
               btn.style.color         = 'var(--accent)';
               btn.style.borderColor   = 'var(--accent)';
               setTimeout(() => {
-                btn.textContent = 'Save Return Info';
+                btn.textContent = 'Save';
                 btn.style.cssText = '';
                 btn.disabled = false;
               }, 2000);
             } else {
               alert('Save failed: ' + (res.message || 'Unknown error'));
               btn.disabled    = false;
-              btn.textContent = 'Save Return Info';
+              btn.textContent = 'Save';
             }
           })
           .catch(err => {
             console.error('Save return info error:', err);
             alert('Network error saving return info.');
             btn.disabled    = false;
-            btn.textContent = 'Save Return Info';
+            btn.textContent = 'Save';
           });
         });
       });
@@ -3866,4 +4127,230 @@ document.addEventListener('DOMContentLoaded', () => {
     })
     .catch(() => alert('An error occurred.'));
   });
+});
+
+// ════════════════════════════════════════════════════════════════
+// EQUIPMENT TRACKING MODULE
+// ════════════════════════════════════════════════════════════════
+
+let equipmentTrackingState = {
+  data: [],
+  filteredData: [],
+  searchTerm: '',
+  statusFilter: 'All'
+};
+
+function calculateEquipmentStatus(totalQty, borrowedQty) {
+  if (borrowedQty === 0) {
+    return 'Available';
+  } else if (borrowedQty === totalQty) {
+    return 'Fully Borrowed';
+  } else if (borrowedQty > 0 && borrowedQty < totalQty) {
+    return 'Partially Borrowed';
+  }
+  return 'Available';
+}
+
+function getStatusBadgeClass(status) {
+  switch(status) {
+    case 'Available': return 'equipment-status-available';
+    case 'Partially Borrowed': return 'equipment-status-partially-borrowed';
+    case 'Fully Borrowed': return 'equipment-status-fully-borrowed';
+    default: return 'equipment-status-available';
+  }
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-';
+  try {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString();
+  } catch {
+    return dateStr;
+  }
+}
+
+function loadEquipmentTracking() {
+  const container = document.getElementById('equipmentCardsContainer');
+  const loadingState = document.getElementById('equipmentLoadingState');
+
+  if (!container) return;
+
+  container.innerHTML = '';
+  loadingState.style.display = 'block';
+
+  const search = document.getElementById('equipmentSearch')?.value || '';
+  const statusFilter = document.getElementById('equipmentStatusFilter')?.value || 'All';
+
+  let url = 'fetch_equipment_tracking.php';
+  const params = new URLSearchParams();
+  if (search) params.append('search', search);
+  if (statusFilter !== 'All') params.append('status', statusFilter);
+
+  if (params.toString()) {
+    url += '?' + params.toString();
+  }
+
+  fetch(url)
+    .then(r => r.json())
+    .then(json => {
+      loadingState.style.display = 'none';
+
+      if (!json.success) {
+        container.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--danger);">Failed to load equipment.</div>';
+        return;
+      }
+
+      equipmentTrackingState.data = Array.isArray(json.data) ? json.data : [];
+      applyEquipmentFilters();
+    })
+    .catch(err => {
+      loadingState.style.display = 'none';
+      container.innerHTML = '<div style="grid-column:1/-1;padding:40px;text-align:center;color:var(--danger);">Error loading equipment.</div>';
+      console.error(err);
+    });
+}
+
+function applyEquipmentFilters() {
+  const search = (document.getElementById('equipmentSearch')?.value || '').toLowerCase();
+  const statusFilter = document.getElementById('equipmentStatusFilter')?.value || 'All';
+
+  equipmentTrackingState.filteredData = equipmentTrackingState.data.filter(item => {
+    if (search) {
+      const nameMatch = (item.equipment_name || '').toLowerCase().includes(search);
+      const idMatch = (item.equipment_id || '').toLowerCase().includes(search);
+      if (!nameMatch && !idMatch) return false;
+    }
+
+    if (statusFilter !== 'All' && item.status !== statusFilter) {
+      return false;
+    }
+
+    return true;
+  });
+
+  renderEquipmentCards();
+}
+
+function renderEquipmentCards() {
+  const container = document.getElementById('equipmentCardsContainer');
+  const emptyState = document.getElementById('equipmentEmptyState');
+
+  if (!container) return;
+
+  if (equipmentTrackingState.filteredData.length === 0) {
+    container.innerHTML = '';
+    emptyState.style.display = 'block';
+    return;
+  }
+
+  emptyState.style.display = 'none';
+  container.innerHTML = '';
+
+  equipmentTrackingState.filteredData.forEach(equipment => {
+    const card = createEquipmentCard(equipment);
+    container.appendChild(card);
+  });
+}
+
+function createEquipmentCard(equipment) {
+  const card = document.createElement('div');
+  card.className = 'equipment-card';
+  card.onclick = () => showEquipmentDetail(equipment);
+
+  const imageHtml = equipment.photo_url
+    ? '<img src="' + equipment.photo_url + '" alt="' + equipment.equipment_name + '" class="equipment-card-image">'
+    : '<div class="equipment-card-image-fallback">📦</div>';
+
+  const borrowerSection = equipment.current_borrower
+    ? '<div class="equipment-card-borrower"><span class="equipment-card-borrower-label">Current Borrower</span><div class="equipment-card-borrower-name">' + escapeHtml(equipment.current_borrower) + '</div><div class="equipment-card-dates"><div class="equipment-card-date-item"><span class="equipment-card-date-label">Borrowed:</span><span class="equipment-card-date-value">' + formatDate(equipment.date_borrowed) + '</span></div><div class="equipment-card-date-item"><span class="equipment-card-date-label">Expected Return:</span><span class="equipment-card-date-value">' + formatDate(equipment.expected_return_date) + '</span></div></div></div>'
+    : '';
+
+  const badgeClass = getStatusBadgeClass(equipment.status);
+
+  card.innerHTML = '<div class="equipment-card-image-container">' + imageHtml + '</div><div class="equipment-card-header"><div class="equipment-card-name">' + escapeHtml(equipment.equipment_name) + '</div><div class="equipment-card-id">' + escapeHtml(equipment.equipment_id) + '</div></div><div class="equipment-card-status-badge ' + badgeClass + '">' + escapeHtml(equipment.status) + '</div><div class="equipment-card-quantities"><div class="equipment-card-qty-item"><span class="equipment-card-qty-label">Available</span><span class="equipment-card-qty-value equipment-card-qty-available">' + equipment.available_qty + '</span></div><div class="equipment-card-qty-item"><span class="equipment-card-qty-label">Borrowed</span><span class="equipment-card-qty-value equipment-card-qty-borrowed">' + equipment.borrowed_qty + '</span></div></div>' + borrowerSection;
+
+  return card;
+}
+
+function showEquipmentDetail(equipment) {
+  const modal = document.getElementById('equipmentDetailModal');
+  if (!modal) return;
+
+  document.getElementById('modalEquipmentName').textContent = equipment.equipment_name;
+  document.getElementById('modalEquipmentId').textContent = equipment.equipment_id;
+  document.getElementById('modalTotalQty').textContent = equipment.total_qty;
+  document.getElementById('modalAvailableQty').textContent = equipment.available_qty;
+  document.getElementById('modalBorrowedQty').textContent = equipment.borrowed_qty;
+
+  const imgEl = document.getElementById('modalEquipmentImage');
+  if (equipment.photo_url) {
+    imgEl.src = equipment.photo_url;
+    imgEl.style.display = 'block';
+  } else {
+    imgEl.style.display = 'none';
+  }
+
+  modal.style.display = 'flex';
+  loadEquipmentHistory(equipment.equipment_name);
+}
+
+function loadEquipmentHistory(equipmentName) {
+  const historyBody = document.getElementById('modalHistoryBody');
+  if (!historyBody) return;
+
+  historyBody.innerHTML = '<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-3);">Loading history...</td></tr>';
+
+  fetch('fetch_equipment_history.php?equipment_name=' + encodeURIComponent(equipmentName))
+    .then(r => r.json())
+    .then(json => {
+      if (!json.success || !Array.isArray(json.data)) {
+        historyBody.innerHTML = '<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-3);">No history found.</td></tr>';
+        return;
+      }
+
+      if (json.data.length === 0) {
+        historyBody.innerHTML = '<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--text-3);">No borrowing history.</td></tr>';
+        return;
+      }
+
+      let html = '';
+      json.data.forEach(record => {
+        html += '<tr style="border-bottom:1px solid var(--border);"><td style="padding:10px;">' + escapeHtml(record.borrower_name || '-') + '</td><td style="padding:10px;">' + formatDate(record.date_borrowed) + '</td><td style="padding:10px;">' + formatDate(record.expected_return) + '</td><td style="padding:10px;"><span style="font-size:10px;font-weight:600;text-transform:uppercase;padding:3px 8px;border-radius:4px;background:var(--bg);color:var(--text-1);">' + escapeHtml(record.status) + '</span></td></tr>';
+      });
+      historyBody.innerHTML = html;
+    })
+    .catch(err => {
+      historyBody.innerHTML = '<tr><td colspan="4" style="padding:20px;text-align:center;color:var(--danger);">Error loading history.</td></tr>';
+      console.error(err);
+    });
+}
+
+function closeEquipmentModal() {
+  const modal = document.getElementById('equipmentDetailModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function escapeHtml(text) {
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text ? text.replace(/[&<>"']/g, m => map[m]) : '-';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const modal = document.getElementById('equipmentDetailModal');
+  if (modal) {
+    modal.addEventListener('click', function(e) {
+      if (e.target === this) {
+        closeEquipmentModal();
+      }
+    });
+  }
 });

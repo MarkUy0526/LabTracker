@@ -397,8 +397,10 @@ $slideImages = [
       font-size: 0.69rem; font-weight: 600; letter-spacing: 0.06em;
       text-transform: uppercase; padding: 3px 9px; border-radius: 20px;
     }
-    .guest-badge.accepted { background: #d4edda; color: #2e7d32; }
-    .guest-badge.rejected { background: #fde8e8; color: #c62828; }
+    .guest-badge.accepted,
+    .guest-badge.approved { background: #d4edda; color: #2e7d32; }
+    .guest-badge.rejected,
+    .guest-badge.denied { background: #fde8e8; color: #c62828; }
     .guest-badge.pending  { background: #fff3cd; color: #b45309; }
 
     .guest-tab-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
@@ -685,6 +687,16 @@ $slideImages = [
         </button>
         <p id="guest-error-message"></p>
 
+        <div class="divider">or</div>
+
+        <button class="btn-guest" id="checkStatusBtn" type="button" style="border-color:var(--accent);color:var(--accent);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Check Request Status
+        </button>
+
         <div class="divider">recent login numbers</div>
         <div class="guest-tab-header">
           <span class="guest-tab-title">Submitted Requests</span>
@@ -830,6 +842,10 @@ $slideImages = [
     });
   });
 
+  document.getElementById('checkStatusBtn').addEventListener('click', () => {
+    window.location.href = 'check_status.php';
+  });
+
   function fetchRecentGuests() {
     fetch('fetch_recent_guests.php').then(r => r.json()).then(data => {
       if (!data.success || !Array.isArray(data.data)) return;
@@ -847,8 +863,11 @@ $slideImages = [
         const li = document.createElement('li');
         li.className = 'guest-item';
         li.style.animationDelay = (i * 0.05) + 's';
-        const s = (item.status || 'pending').toLowerCase();
-        li.innerHTML = `<span class="g-num">${item.guest_number}</span><span class="guest-badge ${s}">${s.charAt(0).toUpperCase()+s.slice(1)}</span>`;
+        const rawStatus = item.status || 'Pending';
+        const s = rawStatus.toLowerCase();
+        const displayStatus = s === 'accepted' ? 'Approved' : (s === 'rejected' ? 'Denied' : rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase());
+        const statusClass = s === 'accepted' ? 'approved' : (s === 'rejected' ? 'denied' : s);
+        li.innerHTML = `<span class="g-num">${item.guest_number}</span><span class="guest-badge ${statusClass}">${displayStatus}</span>`;
         list.appendChild(li);
       });
     }).catch(() => {});

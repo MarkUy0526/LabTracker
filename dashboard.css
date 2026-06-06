@@ -1574,3 +1574,176 @@ canvas { max-width: 100%; }
     justify-content: flex-start;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   EQUIPMENT TRACKING CARDS
+   ═══════════════════════════════════════════════════════════════ */
+
+.equipment-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  transition: all 0.18s ease;
+  cursor: pointer;
+}
+
+.equipment-card:hover {
+  border-color: var(--accent-2);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.equipment-card-image-container {
+  width: 100%;
+  height: 120px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.equipment-card-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.equipment-card-image-fallback {
+  font-size: 48px;
+  color: var(--text-3);
+}
+
+.equipment-card-header {
+  margin-bottom: 12px;
+}
+
+.equipment-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-bottom: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.equipment-card-id {
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: monospace;
+}
+
+.equipment-card-status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+
+.equipment-status-available {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.equipment-status-partially-borrowed {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.equipment-status-fully-borrowed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.equipment-card-quantities {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.equipment-card-qty-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.equipment-card-qty-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+}
+
+.equipment-card-qty-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-family: monospace;
+}
+
+.equipment-card-qty-available {
+  color: var(--accent);
+}
+
+.equipment-card-qty-borrowed {
+  color: var(--warn);
+}
+
+.equipment-card-borrower {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 12px;
+  font-size: 11px;
+}
+
+.equipment-card-borrower-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  display: block;
+  margin-bottom: 3px;
+}
+
+.equipment-card-borrower-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.equipment-card-dates {
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--text-3);
+}
+
+.equipment-card-date-item {
+  margin-bottom: 3px;
+}
+
+.equipment-card-date-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+}
+
+.equipment-card-date-value {
+  color: var(--text-1);
+}

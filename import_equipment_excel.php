@@ -131,20 +131,72 @@ $excelIds     = array_column($dataRows, 'equipment_id');
 $placeholders = implode(',', array_fill(0, count($excelIds), '?'));
 $types        = str_repeat('s', count($excelIds));
 
-$sql  = "SELECT equipment_id FROM equipment WHERE equipment_id IN ($placeholders)";
+$sql  = "SELECT equipment_id, equipment_name, working_qty, available FROM equipment WHERE equipment_id IN ($placeholders)";
 $stmt = $conn->prepare($sql);
 $stmt->bind_param($types, ...$excelIds);
 $stmt->execute();
 $result = $stmt->get_result();
 
 $existingIds = [];
+$existingEquipment = [];
 while ($row = $result->fetch_assoc()) {
     $existingIds[] = $row['equipment_id'];
+    $existingEquipment[$row['equipment_id']] = $row;
+}
+
+$activeBorrowedByName = [];
+$activeBorrowerNamesByName = [];
+if (!empty($existingEquipment)) {
+    $equipmentNames = array_values(array_unique(array_filter(array_column($existingEquipment, 'equipment_name'))));
+    if (!empty($equipmentNames)) {
+        $namePlaceholders = implode(',', array_fill(0, count($equipmentNames), '?'));
+        $nameTypes = str_repeat('s', count($equipmentNames));
+        $borrowStmt = $conn->prepare("
+            SELECT
+                be.equipment_name,
+                COALESCE(SUM(be.quantity), 0) AS borrowed_qty,
+                GROUP_CONCAT(DISTINCT br.borrower_name ORDER BY br.borrower_name SEPARATOR ', ') AS borrowers
+            FROM borrowed_equipment be
+            INNER JOIN borrow_requests br ON br.id = be.borrow_request_id
+            WHERE be.equipment_name IN ($namePlaceholders)
+              AND br.status IN ('Pending', 'Approved')
+              AND (be.returned_on IS NULL OR be.returned_on = '')
+            GROUP BY be.equipment_name
+        ");
+        $borrowStmt->bind_param($nameTypes, ...$equipmentNames);
+        $borrowStmt->execute();
+        $borrowResult = $borrowStmt->get_result();
+        while ($borrowRow = $borrowResult->fetch_assoc()) {
+            $activeBorrowedByName[$borrowRow['equipment_name']] = (int)$borrowRow['borrowed_qty'];
+            $activeBorrowerNamesByName[$borrowRow['equipment_name']] = $borrowRow['borrowers'] ?? '';
+        }
+        $borrowStmt->close();
+    }
 }
 
 // Mark each row with its status for the preview
 foreach ($dataRows as &$row) {
     $row['status'] = in_array($row['equipment_id'], $existingIds) ? 'duplicate' : 'new';
+    $row['current_borrowed_qty'] = 0;
+    $row['current_available'] = null;
+    $row['import_warning'] = '';
+
+    if ($row['status'] === 'duplicate') {
+        $existing = $existingEquipment[$row['equipment_id']] ?? null;
+        if ($existing) {
+            $currentAvailable = (int)($existing['available'] ?? 0);
+            $activeBorrowedQty = (int)($activeBorrowedByName[$existing['equipment_name']] ?? 0);
+            $currentBorrowedQty = $activeBorrowedQty;
+
+            $row['current_borrowed_qty'] = $currentBorrowedQty;
+            $row['current_available'] = $currentAvailable;
+            $row['active_borrowers'] = $activeBorrowerNamesByName[$existing['equipment_name']] ?? '';
+
+            if ($currentBorrowedQty > 0) {
+                $row['import_warning'] = 'borrowed';
+            }
+        }
+    }
 }
 unset($row);
 
@@ -156,6 +208,7 @@ if ($preview) {
         "duplicates" => $existingIds,
         "new_count"  => count(array_filter($dataRows, fn($r) => $r['status'] === 'new')),
         "dup_count"  => count($existingIds),
+        "borrowed_conflict_count" => count(array_filter($dataRows, fn($r) => ($r['import_warning'] ?? '') === 'borrowed')),
     ]);
     exit;
 }
@@ -167,6 +220,12 @@ $importedAt = date('Y-m-d H:i:s');
 
 foreach ($dataRows as $r) {
     $available = $r['working_qty'];
+    if (in_array($r['equipment_id'], $existingIds)) {
+        $borrowedQty = (int)($r['current_borrowed_qty'] ?? 0);
+        if ($borrowedQty > 0) {
+            $available = max(0, $r['working_qty'] - $borrowedQty);
+        }
+    }
 
     if (in_array($r['equipment_id'], $existingIds)) {
         // Update existing equipment

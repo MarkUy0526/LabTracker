@@ -20,13 +20,13 @@ function getStatusCounts($conn, $start, $end) {
               GROUP BY status";
     $result = $conn->query($query);
 
-    $stats = ['total' => 0, 'accepted' => 0, 'rejected' => 0];
+    $stats = ['total' => 0, 'approved' => 0, 'denied' => 0];
     while ($row = $result->fetch_assoc()) {
         $stats['total'] += $row['count'];
-        if ($row['status'] === 'Accepted') {
-            $stats['accepted'] += $row['count'];
-        } elseif ($row['status'] === 'Rejected') {
-            $stats['rejected'] += $row['count'];
+        if ($row['status'] === 'Approved') {
+            $stats['approved'] += $row['count'];
+        } elseif ($row['status'] === 'Denied') {
+            $stats['denied'] += $row['count'];
         }
     }
     return $stats;
@@ -62,7 +62,7 @@ $trendQuery = "
         COUNT(*) AS borrow_count
     FROM borrow_requests br
     JOIN borrowed_equipment be ON br.id = be.borrow_request_id
-    WHERE br.status = 'Accepted'
+    WHERE br.status = 'Approved'
     GROUP BY be.equipment_name, month
 ";
 

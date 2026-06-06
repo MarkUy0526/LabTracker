@@ -3,13 +3,13 @@ require 'db.php';
 
 $response = ['success' => false, 'updated_items' => 0, 'messages' => []];
 
-$rejectedQuery = $conn->query("SELECT id FROM borrow_requests WHERE status = 'Rejected' AND processed = 0");
+$rejectedQuery = $conn->query("SELECT id FROM borrow_requests WHERE status = 'Denied' AND processed = 0");
 $rejectedIDs = [];
 
 while ($row = $rejectedQuery->fetch_assoc()) {
     $rejectedIDs[] = $row['id'];
 }
-$response['messages'][] = "Rejected request IDs found: " . implode(", ", $rejectedIDs);
+$response['messages'][] = "Denied request IDs found: " . implode(", ", $rejectedIDs);
 
 foreach ($rejectedIDs as $borrowID) {
     $stmt = $conn->prepare("

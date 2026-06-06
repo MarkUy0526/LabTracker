@@ -3,7 +3,7 @@ include 'db.php';
 
 $sql = "SELECT guest_number, status, created_at 
         FROM borrow_requests 
-        WHERE status IN ('accepted', 'rejected', 'pending') 
+        WHERE status IN ('approved', 'denied', 'pending') 
         ORDER BY created_at DESC 
         LIMIT 10";
 
