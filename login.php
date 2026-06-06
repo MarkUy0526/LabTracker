@@ -397,8 +397,10 @@ $slideImages = [
       font-size: 0.69rem; font-weight: 600; letter-spacing: 0.06em;
       text-transform: uppercase; padding: 3px 9px; border-radius: 20px;
     }
-    .guest-badge.accepted { background: #d4edda; color: #2e7d32; }
-    .guest-badge.rejected { background: #fde8e8; color: #c62828; }
+    .guest-badge.accepted,
+    .guest-badge.approved { background: #d4edda; color: #2e7d32; }
+    .guest-badge.rejected,
+    .guest-badge.denied { background: #fde8e8; color: #c62828; }
     .guest-badge.pending  { background: #fff3cd; color: #b45309; }
 
     .guest-tab-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
@@ -861,8 +863,11 @@ $slideImages = [
         const li = document.createElement('li');
         li.className = 'guest-item';
         li.style.animationDelay = (i * 0.05) + 's';
-        const s = (item.status || 'pending').toLowerCase();
-        li.innerHTML = `<span class="g-num">${item.guest_number}</span><span class="guest-badge ${s}">${s.charAt(0).toUpperCase()+s.slice(1)}</span>`;
+        const rawStatus = item.status || 'Pending';
+        const s = rawStatus.toLowerCase();
+        const displayStatus = s === 'accepted' ? 'Approved' : (s === 'rejected' ? 'Denied' : rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase());
+        const statusClass = s === 'accepted' ? 'approved' : (s === 'rejected' ? 'denied' : s);
+        li.innerHTML = `<span class="g-num">${item.guest_number}</span><span class="guest-badge ${statusClass}">${displayStatus}</span>`;
         list.appendChild(li);
       });
     }).catch(() => {});

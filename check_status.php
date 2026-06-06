@@ -1,6 +1,9 @@
 <?php
 session_start();
 require 'db.php';
+require 'return_photo_helpers.php';
+
+ensureReturnPhotoColumns($conn);
 
 // Handle AJAX requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -547,6 +550,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         const statusClass = 'status-' + (r.status || 'pending').toLowerCase();
         const statusDisplay = (r.status || 'Pending').charAt(0).toUpperCase() + (r.status || 'Pending').slice(1).toLowerCase();
+        const verificationStatus = r.return_verification_status || 'Pending Verification';
+        const hasReturnPhoto = !!r.return_photo_path;
+        const canSubmitReturnPhoto = r.status === 'Approved' && verificationStatus !== 'Verified';
 
         let equipmentHtml = '<div class="equipment-section"><div class="equipment-title">Equipment Borrowed</div><div class="equipment-list">';
 
@@ -564,6 +570,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         equipmentHtml += '</div></div>';
+
+        const returnPhotoHtml = r.status === 'Approved' ? `
+          <div class="equipment-section">
+            <div class="equipment-title">Return Photo Submission</div>
+            <div class="equipment-list" style="padding: 14px;">
+              <p style="font-size: 0.9rem; color: var(--muted); margin-bottom: 10px;">
+                Verification Status: <strong>${escapeHtml(verificationStatus)}</strong>
+              </p>
+              ${hasReturnPhoto ? `
+                <p style="font-size: 0.88rem; color: var(--muted); margin-bottom: 10px;">
+                  Submitted: ${r.return_submitted_at ? new Date(r.return_submitted_at).toLocaleString() : 'Recorded'}
+                </p>
+                <a href="${escapeHtml(r.return_photo_path)}" target="_blank" rel="noopener" style="display:inline-block;margin-bottom:12px;color:var(--accent);font-weight:700;">View uploaded photo</a>
+                <img src="${escapeHtml(r.return_photo_path)}" alt="Uploaded return photo" style="display:block;width:100%;max-width:360px;max-height:240px;object-fit:cover;border:1px solid var(--border);border-radius:12px;">
+              ` : `
+                <p style="font-size: 0.88rem; color: var(--muted); margin-bottom: 10px;">
+                  Upload a clear photo showing all equipment being returned when staff cannot inspect it immediately.
+                </p>
+              `}
+              ${canSubmitReturnPhoto ? `
+                <form class="return-photo-form" data-request-id="${r.id}" style="margin-top:12px;display:grid;gap:10px;max-width:420px;">
+                  <input type="file" name="return_photo" accept="image/*" capture="environment" required style="font:inherit;">
+                  <button type="submit" class="submit-return-photo-btn" style="border:none;border-radius:10px;background:var(--ink);color:var(--white);padding:10px 14px;font-weight:800;cursor:pointer;">
+                    ${hasReturnPhoto ? 'Replace Return Photo' : 'Submit Return Photo'}
+                  </button>
+                  <div class="return-photo-message" style="font-size:0.86rem;color:var(--muted);"></div>
+                </form>
+              ` : ''}
+            </div>
+          </div>
+        ` : '';
 
         card.innerHTML = `
           <div class="request-header">
@@ -603,12 +640,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           </div>
 
           ${equipmentHtml}
+          ${returnPhotoHtml}
         `;
 
         resultsContainer.appendChild(card);
       });
 
       resultsSection.classList.add('show');
+      attachReturnPhotoForms(data.guest_number);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     })
     .catch(err => {
@@ -624,6 +663,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     document.getElementById('guestNumber').focus();
     document.getElementById('resultsSection').classList.remove('show');
     document.getElementById('errorMessage').textContent = '';
+  }
+
+  function attachReturnPhotoForms(guestNumber) {
+    document.querySelectorAll('.return-photo-form').forEach(form => {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const fileInput = form.querySelector('input[type="file"]');
+        const message = form.querySelector('.return-photo-message');
+        const btn = form.querySelector('.submit-return-photo-btn');
+
+        if (!fileInput.files || !fileInput.files[0]) {
+          message.textContent = 'Please select a return photo.';
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append('borrow_request_id', form.dataset.requestId);
+        formData.append('guest_number', guestNumber);
+        formData.append('return_photo', fileInput.files[0]);
+
+        btn.disabled = true;
+        btn.textContent = 'Submitting...';
+        message.textContent = '';
+
+        fetch('submit_return_photo.php', {
+          method: 'POST',
+          body: formData
+        })
+        .then(r => r.json())
+        .then(res => {
+          if (!res.success) {
+            message.textContent = res.message || 'Upload failed.';
+            btn.disabled = false;
+            btn.textContent = 'Submit Return Photo';
+            return;
+          }
+
+          message.textContent = res.message || 'Return photo submitted.';
+          document.getElementById('checkStatusForm').dispatchEvent(new Event('submit'));
+        })
+        .catch(() => {
+          message.textContent = 'Network error uploading return photo.';
+          btn.disabled = false;
+          btn.textContent = 'Submit Return Photo';
+        });
+      });
+    });
   }
 
   function escapeHtml(text) {

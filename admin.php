@@ -417,6 +417,10 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
         <span class="nav-label">Inventory</span>
       </a>
+      <a href="#" class="nav-item" data-section="Equipment Tracking" data-tooltip="Equipment Tracking">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="11" x2="21" y2="11"/><line x1="10" y1="5" x2="10" y2="19"/><line x1="14" y1="5" x2="14" y2="19"/></svg>
+        <span class="nav-label">Equipment Tracking</span>
+      </a>
       <a href="#" class="nav-item" data-section="Reports" data-tooltip="Reports">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
         <span class="nav-label">Reports</span>
@@ -970,6 +974,99 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
       <div id="borrowQueue" style="display:flex;flex-direction:column;gap:8px;"></div>
     </div>
 
+    <!-- ═══════════════════ EQUIPMENT TRACKING ═══════════════════ -->
+    <div id="equipmentTrackingSection" style="display:none;">
+      <div class="page-header"><h1>Equipment Tracking</h1></div>
+
+      <!-- Search & Filter Bar -->
+      <div style="display:flex;align-items:flex-end;gap:12px;margin-bottom:20px;flex-wrap:wrap;background:var(--surface);padding:16px;border-radius:var(--radius);border:1px solid var(--border);">
+        <div style="flex:1;min-width:200px;">
+          <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:4px;">Search</label>
+          <input type="text" id="equipmentSearch" placeholder="Equipment name or ID" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font);font-size:13px;outline:none;" onkeyup="applyEquipmentFilters()">
+        </div>
+        <div>
+          <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:4px;">Status</label>
+          <select id="equipmentStatusFilter" style="padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);font-family:var(--font);font-size:13px;outline:none;background:var(--bg);" onchange="applyEquipmentFilters()">
+            <option value="All">All Status</option>
+            <option value="Available">Available</option>
+            <option value="Partially Borrowed">Partially Borrowed</option>
+            <option value="Fully Borrowed">Fully Borrowed</option>
+          </select>
+        </div>
+        <button onclick="loadEquipmentTracking()" style="padding:10px 18px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-weight:600;cursor:pointer;font-family:var(--font);">🔄 Refresh</button>
+      </div>
+
+      <!-- Equipment Cards Grid -->
+      <div id="equipmentCardsContainer" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;"></div>
+
+      <!-- Loading State -->
+      <div id="equipmentLoadingState" style="text-align:center;padding:40px;color:var(--text-3);font-style:italic;display:none;">Loading equipment...</div>
+
+      <!-- Empty State -->
+      <div id="equipmentEmptyState" style="text-align:center;padding:40px;color:var(--text-3);font-style:italic;display:none;">No equipment found.</div>
+    </div>
+
+    <!-- ═══════════════════ EQUIPMENT DETAIL MODAL ═══════════════════ -->
+    <div id="equipmentDetailModal" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;">
+      <div style="background:var(--surface);border-radius:var(--radius-lg);width:100%;max-width:700px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow);">
+        <!-- Modal Header -->
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:20px;border-bottom:1px solid var(--border);sticky;top:0;background:var(--surface);z-index:10;">
+          <h2 style="margin:0;font-family:'Syne';font-size:1.3rem;font-weight:700;color:var(--text-1);" id="modalEquipmentName"></h2>
+          <button onclick="closeEquipmentModal()" style="background:transparent;border:none;font-size:24px;cursor:pointer;color:var(--text-3);">&times;</button>
+        </div>
+
+        <!-- Modal Content -->
+        <div style="padding:20px;">
+          <!-- Equipment Image & Details -->
+          <div style="display:flex;gap:20px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--border);">
+            <div style="flex-shrink:0;">
+              <img id="modalEquipmentImage" src="" alt="" style="width:120px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--border);background:var(--bg);">
+            </div>
+            <div style="flex:1;">
+              <div style="margin-bottom:12px;">
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Equipment ID</span>
+                <div id="modalEquipmentId" style="font-size:14px;font-weight:600;color:var(--text-1);">-</div>
+              </div>
+              <div style="margin-bottom:12px;">
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Total Quantity</span>
+                <div id="modalTotalQty" style="font-size:14px;font-weight:600;color:var(--text-1);">-</div>
+              </div>
+              <div style="margin-bottom:12px;">
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Available</span>
+                <div id="modalAvailableQty" style="font-size:14px;font-weight:600;color:var(--accent);">-</div>
+              </div>
+              <div>
+                <span style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text-3);">Borrowed</span>
+                <div id="modalBorrowedQty" style="font-size:14px;font-weight:600;color:var(--warn);">-</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Borrowing History -->
+          <div>
+            <h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;color:var(--text-1);">Borrowing History</h3>
+            <div id="modalHistoryContainer" style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+              <table style="width:100%;font-size:12px;border-collapse:collapse;">
+                <thead>
+                  <tr style="background:var(--bg);border-bottom:1px solid var(--border);">
+                    <th style="padding:10px;text-align:left;font-weight:600;color:var(--text-1);">Borrower</th>
+                    <th style="padding:10px;text-align:left;font-weight:600;color:var(--text-1);">Date Borrowed</th>
+                    <th style="padding:10px;text-align:left;font-weight:600;color:var(--text-1);">Expected Return</th>
+                    <th style="padding:10px;text-align:left;font-weight:600;color:var(--text-1);">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="modalHistoryBody">
+                  <tr>
+                    <td colspan="4" style="padding:20px;text-align:center;color:var(--text-3);">Loading...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ═══════════════════ REPORTS ═══════════════════ -->
     <div id="reportsSection" style="display:none;">
       <div class="page-header"><h1>Reports</h1></div>
@@ -1002,6 +1099,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
           </div>
           <button id="reportsFilterBtn" class="primary">Filter</button>
           <button id="reportsClearBtn">Clear</button>
+          <button id="generateSummaryPdfBtn" class="primary" type="button">Generate Summary Report</button>
         </div>
 
         <div id="reportsList" style="display:flex;flex-direction:column;gap:10px;"></div>

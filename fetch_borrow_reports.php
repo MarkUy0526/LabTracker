@@ -1,5 +1,9 @@
 <?php
 require 'db.php';
+require 'return_photo_helpers.php';
+
+ensureReturnPhotoColumns($conn);
+updateOverdueReturnStatuses($conn);
 
 $sql = "SELECT * FROM borrow_requests WHERE status IN ('Approved', 'Denied') ORDER BY id DESC";
 $result = $conn->query($sql);

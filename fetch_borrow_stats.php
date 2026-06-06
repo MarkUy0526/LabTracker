@@ -28,16 +28,24 @@ $result = $stmt->get_result();
 
 $stats = [
     "total"    => 0,
-    "accepted" => 0,
-    "rejected" => 0,
+    "approved" => 0,
+    "denied"   => 0,
     "pending"  => 0
 ];
 
 while ($row = $result->fetch_assoc()) {
-    $stats["total"] += $row['count'];
-    $status = strtolower($row['status']);
+    $count = (int)$row['count'];
+    $stats["total"] += $count;
+    $status = strtolower(trim($row['status']));
+
+    if ($status === 'accepted') {
+        $status = 'approved';
+    } elseif ($status === 'rejected') {
+        $status = 'denied';
+    }
+
     if (array_key_exists($status, $stats)) {
-        $stats[$status] = (int)$row['count'];
+        $stats[$status] += $count;
     }
 }
 
