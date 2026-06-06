@@ -5,7 +5,7 @@ require 'db.php';
 $startDate = isset($_GET['startDate']) ? $_GET['startDate'] : null;
 $endDate = isset($_GET['endDate']) ? $_GET['endDate'] : null;
 
-$query = "SELECT * FROM borrow_requests WHERE status = 'Pending'";
+$query = "SELECT * FROM borrow_requests WHERE LOWER(TRIM(status)) = 'pending'";
 
 if ($startDate && $endDate) {
     $query .= " AND DATE(usage_date) BETWEEN '$startDate' AND '$endDate'";

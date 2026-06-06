@@ -2389,6 +2389,8 @@ function initReportsControls() {
     renderReportsPage();
   });
 
+  document.getElementById('exportApprovedReportsPdfBtn')?.addEventListener('click', exportApprovedReportsPDF);
+
   rowsSelect?.addEventListener('change', e => {
     reportsState.rowsPerPage = parseInt(e.target.value, 10) || 10;
     reportsState.currentPage = 1;
@@ -2451,7 +2453,9 @@ function applyReportsFilters(resetPage = false) {
     const req = entry.borrowRequest || {};
     const date = getReportDate(entry);
     const matchesSearch = !reportsState.search || getReportSearchText(entry).includes(reportsState.search);
-    const matchesStatus = reportsState.status === 'All' || req.status === reportsState.status;
+    const matchesStatus = reportsState.status === 'All'
+      || req.status === reportsState.status
+      || (reportsState.status === 'Accepted' && req.status === 'Not Returned');
     const matchesFrom = !reportsState.from || (date && date >= reportsState.from);
     const matchesTo = !reportsState.to || (date && date <= reportsState.to);
     return matchesSearch && matchesStatus && matchesFrom && matchesTo;
@@ -2528,13 +2532,18 @@ function renderReportCard(entry) {
   const eqList = entry.equipmentList || [];
   const reqId = req.id;
   const isAccepted = req.status === 'Accepted';
-  const statusColor = isAccepted ? 'var(--accent)' : 'var(--danger)';
-  const statusBg = isAccepted ? 'var(--accent-soft)' : 'var(--danger-soft)';
+  const isNotReturned = req.status === 'Not Returned';
+  const isRejected = req.status === 'Rejected';
+  const canEditReturnInfo = isAccepted || isNotReturned;
+  const canExportPdf = isAccepted || isNotReturned;
+  const deniedBadge = isRejected
+    ? '<span style="background:var(--danger-soft);color:var(--danger);font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;">Denied</span>'
+    : '';
 
   const eqRows = eqList.map(eq => {
     const returnedVal = eq.returned_on || '';
     const remarksVal = eq.remarks || '';
-    if (isAccepted) {
+    if (canEditReturnInfo) {
       return `
         <tr data-eq-name="${escHtml(eq.equipment_name)}">
           <td style="padding:6px 10px;border-bottom:1px solid var(--border);">${escHtml(eq.equipment_name)}</td>
@@ -2567,11 +2576,11 @@ function renderReportCard(entry) {
         <span style="color:var(--text-3);font-size:12px;margin-left:8px;">Borrower #${escHtml(req.guest_number)}</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <span style="background:${statusBg};color:${statusColor};font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;">${escHtml(req.status)}</span>
-        <button class="downloadPdfBtn" data-req-id="${reqId}"
-          style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">PDF</button>
-        ${isAccepted ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
-          style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">Save Return Info</button>` : ''}
+        ${deniedBadge}
+        ${canExportPdf ? `<button class="downloadPdfBtn" data-req-id="${reqId}"
+          style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">PDF</button>` : ''}
+        ${canEditReturnInfo ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
+          style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">Save</button>` : ''}
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;font-size:13px;color:var(--text-2);margin-bottom:12px;">
@@ -2599,10 +2608,11 @@ function renderReportCard(entry) {
   return card;
 }
 
-function updateReportsReturnInfo(reqId, returnedItems) {
+function updateReportsReturnInfo(reqId, returnedItems, requestStatus = null) {
   [reportsState.data, reportsState.filteredData].forEach(list => {
     const entry = list.find(item => item.borrowRequest?.id == reqId);
     if (!entry) return;
+    if (requestStatus) entry.borrowRequest.status = requestStatus;
     returnedItems.forEach(item => {
       const eq = (entry.equipmentList || []).find(e => e.equipment_name === item.equipment_name);
       if (eq) {
@@ -2611,6 +2621,108 @@ function updateReportsReturnInfo(reqId, returnedItems) {
       }
     });
   });
+}
+
+function isExportableBorrowReportStatus(status) {
+  return status === 'Accepted' || status === 'Not Returned';
+}
+
+function getReportCardReturnInfo(card) {
+  const currentReturnInfo = new Map();
+  card?.querySelectorAll('tr[data-eq-name]').forEach(row => {
+    currentReturnInfo.set(row.dataset.eqName, {
+      returned_on: row.querySelector('.return-date-input')?.value || '',
+      remarks: getReturnRemarksValue(row)
+    });
+  });
+  return currentReturnInfo;
+}
+
+function buildBorrowRequestPDFHTML(req, eqList, currentReturnInfo = new Map(), pageBreak = false) {
+  const eqRows = (eqList || []).map(eq => {
+    const liveInfo = currentReturnInfo.get(eq.equipment_name) || {};
+    const returnedOn = liveInfo.returned_on ?? eq.returned_on;
+    const remarks = liveInfo.remarks ?? eq.remarks;
+    return `
+      <tr>
+        <td style="border: 1px solid #000; padding: 8px;">${escHtml(eq.equipment_name)}</td>
+        <td style="border: 1px solid #000; padding: 8px; text-align: center;">${eq.quantity}</td>
+        <td style="border: 1px solid #000; padding: 8px; text-align: center;">YES</td>
+        <td style="border: 1px solid #000; padding: 8px;">${returnedOn ? formatDateToDDMMYYYY(returnedOn) : '-'}</td>
+        <td style="border: 1px solid #000; padding: 8px;">${escHtml(remarks || '-')}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div style="font-family: Arial, sans-serif; font-size: 12px; padding: 20px; max-width: 800px; margin: 0 auto; ${pageBreak ? 'page-break-after: always;' : ''}">
+      <div style="text-align: center; margin-bottom: 20px;">
+        <h3 style="margin: 4px 0;">EULOGIO "AMANG" RODRIGUEZ INSTITUTE OF SCIENCE AND TECHNOLOGY</h3>
+        <h3 style="margin: 4px 0;">COLLEGE OF ARTS AND SCIENCES</h3>
+        <h3 style="margin: 4px 0;">APPLIED PHYSICS DEPARTMENT</h3>
+        <h2 style="margin: 10px 0;">Equipment-borrowing Form</h2>
+      </div>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+        <tr><td style="padding: 5px;"><strong>Borrower Login Number:</strong> ${escHtml(req.guest_number)}</td><td style="padding: 5px;"><strong>Date:</strong> ${formatDateToDDMMYYYY(req.date)}</td></tr>
+        <tr><td style="padding: 5px;"><strong>Borrower's Name:</strong> ${escHtml(req.borrower_name)}</td><td style="padding: 5px;"><strong>Instructor's Name:</strong> ${escHtml(req.instructor_name || '-')}</td></tr>
+        <tr><td style="padding: 5px;"><strong>Student ID:</strong> ${escHtml(req.student_id || '-')}</td><td style="padding: 5px;"><strong>Subject Code:</strong> ${escHtml(req.subject_code || '-')}</td></tr>
+        <tr><td style="padding: 5px;"><strong>Department:</strong> ${escHtml(req.department || '-')}</td><td style="padding: 5px;"><strong>Date(s) of Usage:</strong> ${formatDateToDDMMYYYY(req.usage_date)}</td></tr>
+        <tr><td colspan="2" style="padding: 5px;"><strong>Room:</strong> ${escHtml(req.room || '-')}</td></tr>
+      </table>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; border: 1px solid #000;">
+        <thead>
+          <tr style="background: #f0f0f0;">
+            <th style="border: 1px solid #000; padding: 8px; text-align: left;">Equipment / Material</th>
+            <th style="border: 1px solid #000; padding: 8px; text-align: center;">Quantity</th>
+            <th style="border: 1px solid #000; padding: 8px; text-align: center;">Available in the lab?</th>
+            <th style="border: 1px solid #000; padding: 8px; text-align: left;">Returned on</th>
+            <th style="border: 1px solid #000; padding: 8px; text-align: left;">Remarks</th>
+          </tr>
+        </thead>
+        <tbody>${eqRows}</tbody>
+      </table>
+      <div style="margin-bottom: 20px;">
+        <strong>Borrower's Declaration of Commitment:</strong><br/>
+        <em>"I will be accountable to any damage incurred in the equipment and will return the equipment promptly and in the same working condition it was borrowed."</em>
+      </div>
+      <table style="width: 100%; margin-top: 40px;">
+        <tr><td colspan="2" style="padding: 20px; text-align: left; vertical-align: top;">${buildHiromiApprovalBlock(false)}</td></tr>
+      </table>
+    </div>
+  `;
+}
+
+function exportApprovedReportsPDF() {
+  const exportableEntries = reportsState.filteredData.filter(entry =>
+    isExportableBorrowReportStatus(entry.borrowRequest?.status)
+  );
+
+  if (!exportableEntries.length) {
+    showErrorFeedback('No approved or processed requests match the current filters.');
+    return;
+  }
+
+  const container = document.getElementById('reportsList');
+  const formsHtml = exportableEntries.map((entry, index) => {
+    const req = entry.borrowRequest || {};
+    const card = container?.querySelector(`.report-entry[data-req-id="${req.id}"]`);
+    return buildBorrowRequestPDFHTML(
+      req,
+      entry.equipmentList || [],
+      getReportCardReturnInfo(card),
+      index < exportableEntries.length - 1
+    );
+  }).join('');
+
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = formsHtml;
+
+  html2pdf().set({
+    margin: [10, 10, 10, 10],
+    filename: `approved-borrow-requests-${new Date().toISOString().split('T')[0]}.pdf`,
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  }).from(wrapper).save();
 }
 
 function wireReportCardControls(container) {
@@ -2649,27 +2761,32 @@ function wireReportCardControls(container) {
       .then(r => r.json())
       .then(res => {
         if (res.success) {
-          updateReportsReturnInfo(reqId, returnedItems);
+          updateReportsReturnInfo(reqId, returnedItems, res.request_status);
           btn.textContent = 'Saved';
           btn.style.background = 'var(--accent-soft)';
           btn.style.color = 'var(--accent)';
           btn.style.borderColor = 'var(--accent)';
           setTimeout(() => {
-            btn.textContent = 'Save Return Info';
+            if (res.request_status) {
+              applyReportsFilters(false);
+              renderReportsPage();
+              return;
+            }
+            btn.textContent = 'Save';
             btn.style.cssText = '';
             btn.disabled = false;
           }, 2000);
         } else {
           alert('Save failed: ' + (res.message || 'Unknown error'));
           btn.disabled = false;
-          btn.textContent = 'Save Return Info';
+          btn.textContent = 'Save';
         }
       })
       .catch(err => {
         console.error('Save return info error:', err);
         alert('Network error saving return info.');
         btn.disabled = false;
-        btn.textContent = 'Save Return Info';
+        btn.textContent = 'Save';
       });
     });
   });
@@ -3834,12 +3951,13 @@ document.addEventListener('DOMContentLoaded', () => {
       json.data.slice(0, 5).forEach(entry => {
         const req        = entry.borrowRequest;
         const isAccepted = req.status === 'Accepted';
+        const displayStatus = req.status === 'Rejected' ? 'Denied' : req.status;
         const li         = document.createElement('li');
         li.innerHTML = `
           <span style="font-weight:500;">${escHtml(req.borrower_name)}</span>
           <span style="float:right;font-size:11px;font-weight:600;
             color:${isAccepted ? 'var(--accent)' : 'var(--danger)'};">
-            ${escHtml(req.status)}
+            ${escHtml(displayStatus)}
           </span>`;
         listEl.appendChild(li);
       });
@@ -4065,14 +4183,19 @@ function loadReportsLegacy() {
         const reqId  = req.id;
 
         const isAccepted  = req.status === 'Accepted';
-        const statusColor = isAccepted ? 'var(--accent)'      : 'var(--danger)';
-        const statusBg    = isAccepted ? 'var(--accent-soft)' : 'var(--danger-soft)';
+        const isNotReturned = req.status === 'Not Returned';
+        const isRejected = req.status === 'Rejected';
+        const canEditReturnInfo = isAccepted || isNotReturned;
+        const canExportPdf = isAccepted || isNotReturned;
+        const deniedBadge = isRejected
+          ? '<span style="background:var(--danger-soft);color:var(--danger);font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;">Denied</span>'
+          : '';
 
-        // Build editable equipment rows (only for Accepted)
+        // Build editable equipment rows for approved requests that still need return tracking.
         const eqRows = eqList.map((eq, idx) => {
           const returnedVal = eq.returned_on || '';
           const remarksVal  = eq.remarks     || '';
-          if (isAccepted) {
+          if (canEditReturnInfo) {
             return `
             <tr data-eq-name="${escHtml(eq.equipment_name)}">
               <td style="padding:6px 10px;border-bottom:1px solid var(--border);">${escHtml(eq.equipment_name)}</td>
@@ -4106,14 +4229,14 @@ function loadReportsLegacy() {
               <span style="color:var(--text-3);font-size:12px;margin-left:8px;">Borrower #${escHtml(req.guest_number)}</span>
             </div>
             <div style="display:flex;align-items:center;gap:8px;">
-              <span style="background:${statusBg};color:${statusColor};font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;">${escHtml(req.status)}</span>
-              <button class="downloadPdfBtn" data-req-id="${reqId}"
+              ${deniedBadge}
+              ${canExportPdf ? `<button class="downloadPdfBtn" data-req-id="${reqId}"
                 style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">
-                ⬇ PDF
-              </button>
-              ${isAccepted ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
+                PDF
+              </button>` : ''}
+              ${canEditReturnInfo ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
                 style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">
-                Save Return Info
+                Save
               </button>` : ''}
             </div>
           </div>
@@ -4142,7 +4265,7 @@ function loadReportsLegacy() {
         container.appendChild(card);
       });
 
-      // ── Wire Save Return Info buttons ──
+      // Wire return info save buttons.
       container.querySelectorAll('.return-remarks-select').forEach(select => {
         select.addEventListener('change', () => {
           const customInput = select.closest('td')?.querySelector('.return-remarks-other-input');
@@ -4178,26 +4301,32 @@ function loadReportsLegacy() {
           .then(r => r.json())
           .then(res => {
             if (res.success) {
+              updateReportsReturnInfo(reqId, returnedItems, res.request_status);
               btn.textContent = 'Saved ✓';
               btn.style.background    = 'var(--accent-soft)';
               btn.style.color         = 'var(--accent)';
               btn.style.borderColor   = 'var(--accent)';
               setTimeout(() => {
-                btn.textContent = 'Save Return Info';
+                if (res.request_status) {
+                  applyReportsFilters(false);
+                  renderReportsPage();
+                  return;
+                }
+                btn.textContent = 'Save';
                 btn.style.cssText = '';
                 btn.disabled = false;
               }, 2000);
             } else {
               alert('Save failed: ' + (res.message || 'Unknown error'));
               btn.disabled    = false;
-              btn.textContent = 'Save Return Info';
+              btn.textContent = 'Save';
             }
           })
           .catch(err => {
             console.error('Save return info error:', err);
             alert('Network error saving return info.');
             btn.disabled    = false;
-            btn.textContent = 'Save Return Info';
+            btn.textContent = 'Save';
           });
         });
       });

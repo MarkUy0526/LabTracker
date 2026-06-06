@@ -837,7 +837,11 @@ $slideImages = [
       const pill  = document.getElementById('borrowerCountPill');
       if (!list || !pill) return;
       const today = new Date().toISOString().slice(0, 10);
-      pill.textContent = data.data.filter(g => g.created_at && g.created_at.startsWith(today)).length + ' today';
+      const requestDate = g => String(g.created_at || g.date || '').slice(0, 10);
+      const todayCount = Number.isInteger(data.today_count)
+        ? data.today_count
+        : data.data.filter(g => requestDate(g) === today).length;
+      pill.textContent = todayCount + ' today';
       list.innerHTML = '';
       if (!data.data.length) {
         list.innerHTML = '<li style="color:#bbb7ae;font-size:0.82rem;text-align:center;padding:12px 0;">No recent borrowers</li>';
@@ -847,8 +851,10 @@ $slideImages = [
         const li = document.createElement('li');
         li.className = 'guest-item';
         li.style.animationDelay = (i * 0.05) + 's';
-        const s = (item.status || 'pending').toLowerCase();
-        li.innerHTML = `<span class="g-num">${item.guest_number}</span><span class="guest-badge ${s}">${s.charAt(0).toUpperCase()+s.slice(1)}</span>`;
+        const rawStatus = item.status || 'Pending';
+        const s = rawStatus.toLowerCase().replace(/\s+/g, '-');
+        const label = rawStatus.toLowerCase() === 'rejected' ? 'Denied' : rawStatus;
+        li.innerHTML = `<span class="g-num">${item.guest_number}</span><span class="guest-badge ${s}">${label}</span>`;
         list.appendChild(li);
       });
     }).catch(() => {});
@@ -865,7 +871,9 @@ $slideImages = [
       if (!d.success || !Array.isArray(d.data)) return;
       const today = new Date().toISOString().slice(0,10);
       document.getElementById('statGuests').textContent =
-        d.data.filter(g=>g.created_at&&g.created_at.startsWith(today)).length;
+        Number.isInteger(d.today_count)
+          ? d.today_count
+          : d.data.filter(g=>String(g.created_at || g.date || '').slice(0,10) === today).length;
     }).catch(()=>{});
   }
 

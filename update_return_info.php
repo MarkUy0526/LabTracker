@@ -30,15 +30,28 @@ $updateAvailableStmt = $conn->prepare("
     WHERE equipment_name = ?
 ");
 
-if (!$updateStmt || !$getQtyStmt || !$updateAvailableStmt) {
+$updateRequestStatusStmt = $conn->prepare("
+    UPDATE borrow_requests
+    SET status = 'Not Returned'
+    WHERE id = ?
+");
+
+if (!$updateStmt || !$getQtyStmt || !$updateAvailableStmt || !$updateRequestStatusStmt) {
     echo json_encode(["success" => false, "message" => "Prepare failed: " . $conn->error]);
     exit;
 }
+
+$hasNotReturnedItem = false;
 
 foreach ($data['returned_items'] as $item) {
     $equipmentName = $item['equipment_name'];
     $returnedOn = $item['returned_on'];
     $remarks = $item['remarks'];
+    $normalizedRemarks = strtolower(trim((string)$remarks));
+
+    if (in_array($normalizedRemarks, ['lost', 'not working'], true)) {
+        $hasNotReturnedItem = true;
+    }
 
     $updateStmt->bind_param("ssssis",
         $returnedOn,
@@ -67,4 +80,16 @@ foreach ($data['returned_items'] as $item) {
     }
 }
 
-echo json_encode(["success" => true, "message" => "Return info and inventory updated successfully"]);
+if ($hasNotReturnedItem) {
+    $updateRequestStatusStmt->bind_param("i", $borrowRequestId);
+    if (!$updateRequestStatusStmt->execute()) {
+        echo json_encode(["success" => false, "message" => "Request status update failed: " . $updateRequestStatusStmt->error]);
+        exit;
+    }
+}
+
+echo json_encode([
+    "success" => true,
+    "message" => "Return info and inventory updated successfully",
+    "request_status" => $hasNotReturnedItem ? "Not Returned" : null
+]);

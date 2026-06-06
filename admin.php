@@ -1000,6 +1000,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
             <select id="reportsStatusFilter">
               <option value="All">All</option>
               <option value="Accepted">Accepted</option>
+              <option value="Not Returned">Not Returned</option>
               <option value="Rejected">Rejected</option>
             </select>
           </div>
@@ -1013,6 +1014,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
           </div>
           <button id="reportsFilterBtn" class="primary">Filter</button>
           <button id="reportsClearBtn">Clear</button>
+          <button id="exportApprovedReportsPdfBtn" type="button">Export Approved PDF</button>
         </div>
 
         <div id="reportsList" style="display:flex;flex-direction:column;gap:10px;"></div>
