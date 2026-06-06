@@ -1,7 +1,7 @@
 <?php
 require 'db.php';
 
-$sql = "SELECT * FROM borrow_requests WHERE status IN ('Accepted', 'Rejected') ORDER BY id DESC";
+$sql = "SELECT * FROM borrow_requests WHERE status IN ('Approved', 'Denied') ORDER BY id DESC";
 $result = $conn->query($sql);
 $data = [];
 

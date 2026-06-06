@@ -685,6 +685,16 @@ $slideImages = [
         </button>
         <p id="guest-error-message"></p>
 
+        <div class="divider">or</div>
+
+        <button class="btn-guest" id="checkStatusBtn" type="button" style="border-color:var(--accent);color:var(--accent);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Check Request Status
+        </button>
+
         <div class="divider">recent login numbers</div>
         <div class="guest-tab-header">
           <span class="guest-tab-title">Submitted Requests</span>
@@ -828,6 +838,10 @@ $slideImages = [
       btn.disabled = false;
       errEl.textContent = 'Borrower login failed.';
     });
+  });
+
+  document.getElementById('checkStatusBtn').addEventListener('click', () => {
+    window.location.href = 'check_status.php';
   });
 
   function fetchRecentGuests() {

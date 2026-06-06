@@ -20,7 +20,7 @@ try {
       SUM(be.quantity) as total_qty_borrowed
     FROM borrow_requests br
     JOIN borrowed_equipment be ON br.id = be.borrow_request_id
-    WHERE br.status = 'Accepted'
+    WHERE br.status = 'Approved'
       AND br.date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
     GROUP BY be.equipment_name
     ORDER BY borrow_frequency DESC, total_qty_borrowed DESC

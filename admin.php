@@ -442,8 +442,8 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
 
       <div class="stat-grid">
         <div class="stat-card"><div class="label">Total Today</div><div class="value" id="totalRequests">0</div></div>
-        <div class="stat-card green"><div class="label">Accepted</div><div class="value" id="acceptedRequests">0</div></div>
-        <div class="stat-card red"><div class="label">Rejected</div><div class="value" id="rejectedRequests">0</div></div>
+        <div class="stat-card green"><div class="label">Approved</div><div class="value" id="approvedRequests">0</div></div>
+        <div class="stat-card red"><div class="label">Denied</div><div class="value" id="deniedRequests">0</div></div>
         <div class="stat-card orange"><div class="label">Pending</div><div class="value" id="pendingRequests">0</div></div>
       </div>
 
@@ -490,7 +490,7 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
             </div>
             <p>Today's borrow request statistics at a glance.</p>
             <div id="dailyStats" style="margin-top:14px;">
-              <p>Total: <strong id="totalReq2">0</strong> &nbsp;·&nbsp; Accepted: <strong style="color:var(--accent)" id="accReq2">0</strong> &nbsp;·&nbsp; Rejected: <strong style="color:var(--danger)" id="rejReq2">0</strong> &nbsp;·&nbsp; Pending: <strong style="color:var(--warn)" id="penReq2">0</strong></p>
+              <p>Total: <strong id="totalReq2">0</strong> &nbsp;·&nbsp; Approved: <strong style="color:var(--accent)" id="accReq2">0</strong> &nbsp;·&nbsp; Denied: <strong style="color:var(--danger)" id="rejReq2">0</strong> &nbsp;·&nbsp; Pending: <strong style="color:var(--warn)" id="penReq2">0</strong></p>
               <p class="click-instruction">Click to open the Schedule section →</p>
             </div>
           </div>
@@ -905,8 +905,8 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
             <p style="font-size:12px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Month — <span id="monthLabel">—</span></p>
             <div style="display:flex;justify-content:space-around;margin-bottom:12px;">
               <div><div style="font-size:22px;font-weight:600;font-family:var(--mono);" id="monthlyTotal">0</div><div style="font-size:11px;color:var(--text-3);">Total</div></div>
-              <div><div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--accent);" id="monthlyAccepted">0</div><div style="font-size:11px;color:var(--text-3);">Accepted</div></div>
-              <div><div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--danger);" id="monthlyRejected">0</div><div style="font-size:11px;color:var(--text-3);">Rejected</div></div>
+              <div><div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--accent);" id="monthlyApproved">0</div><div style="font-size:11px;color:var(--text-3);">Approved</div></div>
+              <div><div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--danger);" id="monthlyDenied">0</div><div style="font-size:11px;color:var(--text-3);">Denied</div></div>
             </div>
             <p style="font-size:12px;color:var(--text-3);">Top: <strong id="monthlyTopItem">N/A</strong></p>
             <div style="width:180px;height:180px;margin:12px auto 0;"><canvas id="monthlyChart"></canvas></div>
@@ -915,8 +915,8 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
             <p style="font-size:12px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Week — <span id="weekLabel">—</span></p>
             <div style="display:flex;justify-content:space-around;margin-bottom:12px;">
               <div><div style="font-size:22px;font-weight:600;font-family:var(--mono);" id="weeklyTotal">0</div><div style="font-size:11px;color:var(--text-3);">Total</div></div>
-              <div><div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--accent);" id="weeklyAccepted">0</div><div style="font-size:11px;color:var(--text-3);">Accepted</div></div>
-              <div><div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--danger);" id="weeklyRejected">0</div><div style="font-size:11px;color:var(--text-3);">Rejected</div></div>
+              <div><div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--accent);" id="weeklyApproved">0</div><div style="font-size:11px;color:var(--text-3);">Approved</div></div>
+              <div><div style="font-size:22px;font-weight:600;font-family:var(--mono);color:var(--danger);" id="weeklyDenied">0</div><div style="font-size:11px;color:var(--text-3);">Denied</div></div>
             </div>
             <p style="font-size:12px;color:var(--text-3);">Top: <strong id="weeklyTopItem">N/A</strong></p>
             <div style="width:180px;height:180px;margin:12px auto 0;"><canvas id="weeklyChart"></canvas></div>
@@ -939,9 +939,9 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
                 <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:4px;">Status</label>
                 <select id="trendStatus" style="font-family:var(--font);font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text-1);outline:none;">
                   <option value="All">All</option>
-                  <option value="Accepted">Accepted</option>
+                  <option value="Approved">Approved</option>
                   <option value="Pending">Pending</option>
-                  <option value="Rejected">Rejected</option>
+                  <option value="Denied">Denied</option>
                 </select>
               </div>
               <button id="trendFilterBtn" class="primary" style="background:var(--accent);color:#fff;border-color:var(--accent);font-size:12px;">Filter</button>
@@ -988,8 +988,8 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
             <label for="reportsStatusFilter">Status</label>
             <select id="reportsStatusFilter">
               <option value="All">All</option>
-              <option value="Accepted">Accepted</option>
-              <option value="Rejected">Rejected</option>
+              <option value="Approved">Approved</option>
+              <option value="Denied">Denied</option>
             </select>
           </div>
           <div>

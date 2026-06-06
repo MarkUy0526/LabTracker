@@ -2099,14 +2099,14 @@ function renderReportCard(entry) {
   const req = entry.borrowRequest;
   const eqList = entry.equipmentList || [];
   const reqId = req.id;
-  const isAccepted = req.status === 'Accepted';
-  const statusColor = isAccepted ? 'var(--accent)' : 'var(--danger)';
-  const statusBg = isAccepted ? 'var(--accent-soft)' : 'var(--danger-soft)';
+  const isApproved = req.status === 'Approved';
+  const statusColor = isApproved ? 'var(--accent)' : 'var(--danger)';
+  const statusBg = isApproved ? 'var(--accent-soft)' : 'var(--danger-soft)';
 
   const eqRows = eqList.map(eq => {
     const returnedVal = eq.returned_on || '';
     const remarksVal = eq.remarks || '';
-    if (isAccepted) {
+    if (isApproved) {
       return `
         <tr data-eq-name="${escHtml(eq.equipment_name)}">
           <td style="padding:6px 10px;border-bottom:1px solid var(--border);">${escHtml(eq.equipment_name)}</td>
@@ -2142,7 +2142,7 @@ function renderReportCard(entry) {
         <span style="background:${statusBg};color:${statusColor};font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;">${escHtml(req.status)}</span>
         <button class="downloadPdfBtn" data-req-id="${reqId}"
           style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">PDF</button>
-        ${isAccepted ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
+        ${isApproved ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
           style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">Save Return Info</button>` : ''}
       </div>
     </div>
@@ -2333,7 +2333,7 @@ function renderReportsPage() {
   container.innerHTML = '';
 
   if (!reportsState.data.length) {
-    container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">No accepted or rejected requests yet.</div>';
+    container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">No approved or denied requests yet.</div>';
     updateReportsPagination();
     return;
   }
@@ -3018,14 +3018,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
       // Stat cards (top of dashboard)
       set('totalRequests',    s.total    || 0);
-      set('acceptedRequests', s.accepted || 0);
-      set('rejectedRequests', s.rejected || 0);
+      set('approvedRequests', s.approved || 0);
+      set('deniedRequests', s.denied || 0);
       set('pendingRequests',  s.pending  || 0);
 
       // Schedule slider panel
       set('totalReq2', s.total    || 0);
-      set('accReq2',   s.accepted || 0);
-      set('rejReq2',   s.rejected || 0);
+      set('accReq2',   s.approved || 0);
+      set('rejReq2',   s.denied || 0);
       set('penReq2',   s.pending  || 0);
     })
     .catch(err => console.error('fetch_borrow_stats error:', err));
@@ -3063,11 +3063,11 @@ function refreshCalendarStats(containerSelector = '#calendar') {
     fetch(`fetch_borrow_stats.php?date=${dateStr}`).then(r => r.json()).then(data => {
       if (!data.success) return;
       const s = data.stats;
-      if (!s.total && !s.accepted && !s.rejected && !s.pending) return;
+      if (!s.total && !s.approved && !s.denied && !s.pending) return;
       const content = `<div class="custom-stats" style="font-size:.75em;margin-top:5px;line-height:1.2;">
         <div style="font-weight:bold;margin-bottom:4px;">Total: ${s.total}</div>
-        <div style="color:green;">Accepted: ${s.accepted}</div>
-        <div style="color:red;">Rejected: ${s.rejected}</div>
+        <div style="color:green;">Approved: ${s.approved}</div>
+        <div style="color:red;">Denied: ${s.denied}</div>
         <div style="color:orange;">Pending: ${s.pending}</div></div>`;
       const frame = dayCell.querySelector('.fc-daygrid-day-frame');
       if (frame && !frame.querySelector('.custom-stats')) frame.insertAdjacentHTML('beforeend', content);
@@ -3092,12 +3092,12 @@ function initScheduleCharts() {
     set('weekLabel',        `${fmt(sun)} - ${fmt(sat)}`);
     set('monthLabel',       new Date().toLocaleString('default', { month:'long', year:'numeric' }));
     set('weeklyTotal',      w.total);
-    set('weeklyAccepted',   w.accepted);
-    set('weeklyRejected',   w.rejected);
+    set('weeklyApproved',   w.approved);
+    set('weeklyDenied',   w.denied);
     set('weeklyTopItem',    w.topItem);
     set('monthlyTotal',     m.total);
-    set('monthlyAccepted',  m.accepted);
-    set('monthlyRejected',  m.rejected);
+    set('monthlyApproved',  m.approved);
+    set('monthlyDenied',  m.denied);
     set('monthlyTopItem',   m.topItem);
 
     function pie(id, title, acc, rej) {
@@ -3105,12 +3105,12 @@ function initScheduleCharts() {
       if (!ctx) return;
       new Chart(ctx, {
         type: 'doughnut',
-        data: { labels:['Accepted','Rejected'], datasets:[{ data:[acc, rej], backgroundColor:['#4CAF50','#F44336'] }] },
+        data: { labels:['Approved','Denied'], datasets:[{ data:[acc, rej], backgroundColor:['#4CAF50','#F44336'] }] },
         options: { responsive:true, plugins:{ title:{ display:true, text:title }, legend:{ position:'bottom' } } }
       });
     }
-    pie('weeklyChart',  'Weekly Requests',  w.accepted, w.rejected);
-    pie('monthlyChart', 'Monthly Requests', m.accepted, m.rejected);
+    pie('weeklyChart',  'Weekly Requests',  w.approved, w.denied);
+    pie('monthlyChart', 'Monthly Requests', m.approved, m.denied);
 
     const now       = new Date();
     const firstDay  = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -3182,9 +3182,9 @@ function loadTrendChart() {
       const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
       const statusColors = {
         All:      { border: cssVar('--chart-default'), bg: cssVar('--chart-default-soft') },
-        Accepted: { border: cssVar('--accent'),       bg: cssVar('--accent-soft')        },
+        Approved: { border: cssVar('--accent'),       bg: cssVar('--accent-soft')        },
         Pending:  { border: cssVar('--warn'),         bg: cssVar('--warn-soft')          },
-        Rejected: { border: cssVar('--danger'),       bg: cssVar('--danger-soft')        },
+        Denied: { border: cssVar('--danger'),       bg: cssVar('--danger-soft')        },
       };
       const color = statusColors[status] ?? statusColors.All;
 
@@ -3318,12 +3318,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       json.data.slice(0, 5).forEach(entry => {
         const req        = entry.borrowRequest;
-        const isAccepted = req.status === 'Accepted';
+        const isApproved = req.status === 'Approved';
         const li         = document.createElement('li');
         li.innerHTML = `
           <span style="font-weight:500;">${escHtml(req.borrower_name)}</span>
           <span style="float:right;font-size:11px;font-weight:600;
-            color:${isAccepted ? 'var(--accent)' : 'var(--danger)'};">
+            color:${isApproved ? 'var(--accent)' : 'var(--danger)'};">
             ${escHtml(req.status)}
           </span>`;
         listEl.appendChild(li);
@@ -3414,7 +3414,7 @@ function clearFilters() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  fetch('process_rejected_requests.php').then(r=>r.json()).then(data => {
+  fetch('process_denied_requests.php').then(r=>r.json()).then(data => {
     if (data.success) { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); }
   });
 });
@@ -3423,13 +3423,13 @@ function attachActionHandlers() {
   document.querySelectorAll('.accept-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (confirm('Are you sure you want to ACCEPT this borrow request?'))
-        addToReports(btn.dataset.id, 'Accepted').then(() => { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); });
+        addToReports(btn.dataset.id, 'Approved').then(() => { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); });
     });
   });
   document.querySelectorAll('.reject-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (confirm('Are you sure you want to REJECT this borrow request?'))
-        addToReports(btn.dataset.id, 'Rejected').then(() => { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); });
+        addToReports(btn.dataset.id, 'Denied').then(() => { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); });
     });
   });
   document.querySelectorAll('.view-request-btn').forEach(btn => {
@@ -3529,7 +3529,7 @@ function loadBorrowRequestsAndUpdateCount() {
 }
 
 // ════════════════════════════════════════════════════════════════
-// REPORTS — load accepted / rejected requests with return info editing
+// REPORTS — load approved / denied requests with return info editing
 // ════════════════════════════════════════════════════════════════
 function loadReportsLegacy() {
   const container = document.getElementById('reportsList');
@@ -3541,7 +3541,7 @@ function loadReportsLegacy() {
     .then(json => {
       container.innerHTML = '';
       if (!json.success || !json.data.length) {
-        container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">No accepted or rejected requests yet.</div>';
+        container.innerHTML = '<div style="color:var(--text-3);font-style:italic;padding:16px 0;">No approved or denied requests yet.</div>';
         return;
       }
       json.data.forEach(entry => {
@@ -3549,15 +3549,15 @@ function loadReportsLegacy() {
         const eqList = entry.equipmentList || [];
         const reqId  = req.id;
 
-        const isAccepted  = req.status === 'Accepted';
-        const statusColor = isAccepted ? 'var(--accent)'      : 'var(--danger)';
-        const statusBg    = isAccepted ? 'var(--accent-soft)' : 'var(--danger-soft)';
+        const isApproved  = req.status === 'Approved';
+        const statusColor = isApproved ? 'var(--accent)'      : 'var(--danger)';
+        const statusBg    = isApproved ? 'var(--accent-soft)' : 'var(--danger-soft)';
 
-        // Build editable equipment rows (only for Accepted)
+        // Build editable equipment rows (only for Approved)
         const eqRows = eqList.map((eq, idx) => {
           const returnedVal = eq.returned_on || '';
           const remarksVal  = eq.remarks     || '';
-          if (isAccepted) {
+          if (isApproved) {
             return `
             <tr data-eq-name="${escHtml(eq.equipment_name)}">
               <td style="padding:6px 10px;border-bottom:1px solid var(--border);">${escHtml(eq.equipment_name)}</td>
@@ -3596,7 +3596,7 @@ function loadReportsLegacy() {
                 style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">
                 ⬇ PDF
               </button>
-              ${isAccepted ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
+              ${isApproved ? `<button class="saveReturnInfoBtn" data-req-id="${reqId}"
                 style="font-family:var(--font);font-size:12px;padding:5px 12px;border-radius:var(--radius);cursor:pointer;">
                 Save Return Info
               </button>` : ''}
