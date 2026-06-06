@@ -870,20 +870,31 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
         <!-- Most Borrowed Equipment Panel -->
         <div id="mostBorrowedSection" style="margin-top:24px;">
           <div class="card">
-            <h2 style="font-size:15px;font-weight:600;margin-bottom:12px;color:var(--text-1);">Most Borrowed Equipment</h2>
-            <p style="font-size:12px;color:var(--text-3);margin-bottom:12px;">Based on last 6 months of borrowing requests</p>
             <div style="max-height:320px;overflow-y:auto;">
               <table style="width:100%;font-size:12px;" id="mostBorrowedTable">
                 <thead>
+                  <tr>
+                    <th colspan="6" style="padding:12px 10px;text-align:left;background:var(--surface);border-bottom:1px solid var(--border);">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                        <div>
+                          <div style="font-size:15px;font-weight:600;color:var(--text-1);">Most Borrowed Equipment</div>
+                          <div style="font-size:12px;color:var(--text-3);font-weight:400;margin-top:4px;">Based on last 6 months of borrowing requests, including never-borrowed equipment</div>
+                        </div>
+                        <button id="exportMostBorrowedPdfBtn" type="button" style="background:var(--accent-soft);border:1px solid #a8d5b5;padding:6px 12px;border-radius:var(--radius);cursor:pointer;font-size:11px;color:var(--accent);font-weight:600;">PDF</button>
+                      </div>
+                    </th>
+                  </tr>
                   <tr style="background:var(--bg);">
                     <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:40px;">Rank</th>
                     <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:600;color:var(--text-3);">Equipment</th>
-                    <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:120px;">Times Borrowed</th>
-                    <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:100px;">Total Qty</th>
+                    <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:120px;">Borrow Frequency</th>
+                    <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:120px;">Inventory Count</th>
+                    <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:120px;">Availability</th>
+                    <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:120px;">Last Borrow Date</th>
                   </tr>
                 </thead>
                 <tbody id="mostBorrowedBody">
-                  <tr><td colspan="4" style="padding:16px;text-align:center;color:var(--text-3);">Loading…</td></tr>
+                  <tr><td colspan="6" style="padding:16px;text-align:center;color:var(--text-3);">Loading…</td></tr>
                 </tbody>
               </table>
             </div>

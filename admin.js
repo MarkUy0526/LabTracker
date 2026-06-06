@@ -134,25 +134,37 @@ function formatAuditDate(dateStr) {
 }
 
 function loadMostBorrowedEquipment() {
-  fetch('get_most_borrowed.php')
+  fetch('get_most_borrowed.php?all_equipment=1')
     .then(r => r.json())
     .then(res => {
+      const tbody = document.getElementById('mostBorrowedBody');
       if (res.success && res.data) {
-        const tbody = document.getElementById('mostBorrowedBody');
         if (tbody) {
-          tbody.innerHTML = res.data.map((item, idx) => `
+          tbody.innerHTML = res.data.length ? res.data.map((item, idx) => `
             <tr>
               <td style="padding:8px 10px;text-align:center;font-weight:600;">${item.rank}</td>
               <td style="padding:8px 10px;text-align:left;">${escHtml(item.equipment_name)}</td>
               <td style="padding:8px 10px;text-align:center;">${item.borrow_frequency}</td>
-              <td style="padding:8px 10px;text-align:center;">${item.total_qty_borrowed}</td>
+              <td style="padding:8px 10px;text-align:center;">${item.total_qty}</td>
+              <td style="padding:8px 10px;text-align:center;">${item.available}</td>
+              <td style="padding:8px 10px;text-align:center;">${item.last_borrow_date ? formatAuditDate(item.last_borrow_date) : 'Never'}</td>
             </tr>
-          `).join('');
+          `).join('') : '<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--text-3);">No equipment records found.</td></tr>';
         }
+      } else if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--danger);">Failed to load equipment usage report.</td></tr>';
       }
     })
-    .catch(err => console.error('Error loading most borrowed equipment:', err));
+    .catch(err => {
+      const tbody = document.getElementById('mostBorrowedBody');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--danger);">Failed to load equipment usage report.</td></tr>';
+      console.error('Error loading most borrowed equipment:', err);
+    });
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('exportMostBorrowedPdfBtn')?.addEventListener('click', exportMostBorrowedPDF);
+});
 
 function openStartAuditModal() {
   const today = new Date().toISOString().split('T')[0];
@@ -961,6 +973,137 @@ function exportAuditPDF(auditId) {
     .catch(err => showErrorFeedback('Failed to export PDF: ' + err.message));
 }
 
+function exportMostBorrowedPDF() {
+  const fileName = `most-borrowed-equipment-${new Date().toISOString().split('T')[0]}.pdf`;
+
+  fetch('get_most_borrowed.php?all_equipment=1')
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) throw new Error(res.message || 'Failed to fetch equipment usage report');
+
+      const html = buildMostBorrowedPDFHTML(res.data || []);
+
+      html2pdf()
+        .set({
+          margin: [10, 10, 10, 10],
+          filename: fileName,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
+        })
+        .from(html)
+        .save();
+
+      showInventoryFeedback('Most borrowed equipment PDF exported successfully');
+    })
+    .catch(err => showErrorFeedback('Failed to export PDF: ' + err.message));
+}
+
+function buildMostBorrowedPDFHTML(equipmentData) {
+  const generatedDate = new Date().toLocaleDateString('en-PH');
+  const generatedTime = new Date().toLocaleTimeString('en-PH');
+  const totalInventoryCount = (equipmentData || []).reduce((sum, eq) => sum + (Number(eq.total_qty) || 0), 0);
+  const totalAvailableCount = (equipmentData || []).reduce((sum, eq) => sum + (Number(eq.available) || 0), 0);
+
+  const equipmentRows = (equipmentData || [])
+    .map(eq => `
+      <tr style="border-bottom:1px solid #eee;">
+        <td style="padding:6px 8px;text-align:center;font-size:10px;font-weight:600;">${eq.rank || ''}</td>
+        <td style="padding:6px 8px;font-size:10px;">${escHtml(eq.equipment_name || 'N/A')}</td>
+        <td style="padding:6px 8px;text-align:center;font-size:10px;color:#27ae60;">${eq.borrow_frequency || 0}</td>
+        <td style="padding:6px 8px;text-align:center;font-size:10px;">${eq.total_qty || 0}</td>
+        <td style="padding:6px 8px;text-align:center;font-size:10px;">${eq.available || 0}</td>
+        <td style="padding:6px 8px;text-align:center;font-size:10px;color:#666;">${eq.last_borrow_date ? new Date(eq.last_borrow_date).toLocaleDateString('en-PH') : 'Never'}</td>
+      </tr>
+    `).join('');
+
+  return `
+    <div style="font-family:Arial,sans-serif;color:#333;line-height:1.5;">
+      <div style="text-align:center;margin-bottom:20px;border-bottom:2px solid #27ae60;padding-bottom:12px;">
+        <h1 style="margin:0 0 4px 0;font-size:22px;color:#27ae60;">Most Borrowed Equipment Report</h1>
+        <p style="margin:0;font-size:13px;color:#666;">Inventory Audit Usage Monitoring</p>
+      </div>
+
+      <table style="width:100%;margin-bottom:16px;font-size:11px;">
+        <tr>
+          <td style="padding:4px 8px;font-weight:600;width:25%;">Generated:</td>
+          <td style="padding:4px 8px;">${generatedDate} ${generatedTime}</td>
+          <td style="padding:4px 8px;font-weight:600;width:25%;">Period:</td>
+          <td style="padding:4px 8px;">Last 6 Months</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 8px;font-weight:600;">Equipment Records:</td>
+          <td style="padding:4px 8px;">${equipmentData.length}</td>
+          <td style="padding:4px 8px;font-weight:600;">Includes Never Borrowed:</td>
+          <td style="padding:4px 8px;">Yes</td>
+        </tr>
+      </table>
+
+      <div style="margin-bottom:16px;">
+        <h2 style="font-size:14px;font-weight:600;margin:0 0 8px 0;border-bottom:1px solid #27ae60;padding-bottom:4px;">Inventory Summary</h2>
+        <table style="width:100%;font-size:11px;border-collapse:collapse;">
+          <tr style="background:#f9f9f9;">
+            <td style="padding:8px;border:1px solid #ddd;font-weight:600;text-align:center;width:50%;">Total Inventory Count</td>
+            <td style="padding:8px;border:1px solid #ddd;font-weight:600;text-align:center;width:50%;color:#27ae60;">Current Availability</td>
+          </tr>
+          <tr>
+            <td style="padding:8px;border:1px solid #ddd;text-align:center;font-size:16px;font-weight:600;">${totalInventoryCount}</td>
+            <td style="padding:8px;border:1px solid #ddd;text-align:center;font-size:16px;font-weight:600;color:#27ae60;">${totalAvailableCount}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div>
+        <h2 style="font-size:14px;font-weight:600;margin:0 0 8px 0;border-bottom:1px solid #27ae60;padding-bottom:4px;">Most Borrowed Equipment</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:10px;">
+          <thead>
+            <tr style="background:#27ae60;color:#fff;">
+              <th style="padding:6px 8px;text-align:center;font-weight:600;">Rank</th>
+              <th style="padding:6px 8px;text-align:left;font-weight:600;">Most Borrowed Equipment</th>
+              <th style="padding:6px 8px;text-align:center;font-weight:600;">Borrow Frequency</th>
+              <th style="padding:6px 8px;text-align:center;font-weight:600;">Total Inventory Count</th>
+              <th style="padding:6px 8px;text-align:center;font-weight:600;">Current Availability</th>
+              <th style="padding:6px 8px;text-align:center;font-weight:600;">Last Borrow Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${equipmentRows || '<tr><td colspan="6" style="padding:12px;text-align:center;color:#666;">No equipment records found.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+
+      ${buildPDFSignatories('Inventory Audit Administrator')}
+
+      <div style="margin-top:16px;padding-top:8px;border-top:1px solid #ddd;font-size:10px;color:#666;">
+        <p style="margin:4px 0;">This report tracks all equipment records, including items that have never been borrowed, for comprehensive inventory monitoring and historical records.</p>
+      </div>
+    </div>
+  `;
+}
+
+function buildPDFSignatories(preparedBy = 'Inventory Audit Administrator') {
+  return `
+    <div style="margin-top:28px;page-break-inside:avoid;">
+      <h2 style="font-size:14px;font-weight:600;margin:0 0 14px 0;border-bottom:1px solid #27ae60;padding-bottom:4px;">Signatories</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <tr>
+          <td style="width:50%;padding:8px 20px 0 0;vertical-align:bottom;">
+            <div style="font-weight:600;margin-bottom:54px;">Prepared by:</div>
+            <div style="border-top:1px solid #333;padding-top:6px;text-align:center;font-weight:600;">${escHtml(preparedBy || 'Inventory Audit Administrator')}</div>
+            <div style="text-align:center;color:#666;font-size:10px;margin-top:2px;">Inventory Audit Administrator</div>
+          </td>
+          <td style="width:50%;padding:8px 0 0 20px;vertical-align:bottom;">
+            <div style="font-weight:600;">Approved by:</div>
+            <div class="hiromi-esig-slot" style="height:68px;display:flex;align-items:flex-end;justify-content:center;">${buildHiromiSignatureImage()}</div>
+            <div style="border-top:1px solid #333;padding-top:6px;text-align:center;font-weight:600;">Mr. Hiromi Rivas</div>
+            <div style="text-align:center;color:#666;font-size:10px;margin-top:2px;">Applied Physics Professor</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+}
+
 function buildAuditPDFHTML(auditData, equipmentData) {
   const auditDate = new Date(auditData.audit_date).toLocaleDateString('en-PH');
   const generatedDate = new Date().toLocaleDateString('en-PH');
@@ -1084,6 +1227,8 @@ function buildAuditPDFHTML(auditData, equipmentData) {
           </tbody>
         </table>
       </div>
+
+      ${buildPDFSignatories(auditData.admin_name || 'Inventory Audit Administrator')}
 
       <!-- Legend & Footer -->
       <div style="margin-top:16px;padding-top:8px;border-top:1px solid #ddd;font-size:10px;color:#666;">
