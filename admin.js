@@ -2179,6 +2179,28 @@ function buildPdfSignatoriesSection() {
   `;
 }
 
+function buildSummaryPdfSignatoriesSection() {
+  return `
+    <div style="margin-top: 34px;">
+      <div style="font-weight:700;margin-bottom:18px;">Signatories</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <tr>
+          <td style="width:50%;padding:28px 40px 8px;text-align:center;">
+            <div style="border-bottom:1px solid #000;height:22px;margin:0 auto 8px;max-width:240px;"></div>
+            <div style="font-weight:700;">Mr. Hiromi Rivas</div>
+            <div>Applied Physics Professor</div>
+          </td>
+          <td style="width:50%;padding:28px 40px 8px;text-align:center;">
+            <div style="border-bottom:1px solid #000;height:22px;margin:0 auto 8px;max-width:240px;"></div>
+            <div style="font-weight:700;">Mr. Lester Bernardino</div>
+            <div>Chairperson</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+}
+
 let mostBorrowedEquipmentData = [];
 
 function loadMostBorrowedEquipment() {
@@ -2269,7 +2291,7 @@ function exportMostBorrowedEquipmentPdf() {
         </thead>
         <tbody>${rows}</tbody>
       </table>
-      ${buildPdfSignatoriesSection()}
+      ${buildSummaryPdfSignatoriesSection()}
     </div>`;
 
   html2pdf().set({
@@ -2634,7 +2656,13 @@ function wireReportCardControls(container) {
             <strong>Borrower's Declaration of Commitment:</strong><br/>
             <em>"I will be accountable to any damage incurred in the equipment and will return the equipment promptly and in the same working condition it was borrowed."</em>
           </div>
-          ${buildPdfSignatoriesSection()}
+          <table style="width: 100%; margin-top: 40px;">
+            <tr>
+              <td colspan="2" style="padding: 20px; text-align: left; vertical-align: top;">
+                ${buildHiromiApprovalBlock(false)}
+              </td>
+            </tr>
+          </table>
         </div>
       `;
 
@@ -2709,7 +2737,7 @@ function generateSummaryReportPdf() {
         </thead>
         <tbody>${rows}</tbody>
       </table>
-      ${buildPdfSignatoriesSection()}
+      ${buildSummaryPdfSignatoriesSection()}
     </div>
   `;
 

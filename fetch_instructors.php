@@ -1,9 +1,17 @@
 <?php
+require 'db.php';
+header('Content-Type: application/json');
 
-include 'db.php';
+$result = $conn->query("SELECT instructor_name FROM instructors ORDER BY instructor_name");
 
-$stmt = $pdo->query("SELECT name FROM instructors");
-$instructors = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$instructors = [];
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $instructors[] = $row;
+    }
+}
 
 echo json_encode($instructors);
+
+$conn->close();
 ?>

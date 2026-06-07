@@ -1,9 +1,17 @@
 <?php
+require 'db.php';
+header('Content-Type: application/json');
 
-include 'db.php';
+$result = $conn->query("SELECT room_number FROM rooms ORDER BY room_number");
 
-$stmt = $pdo->query("SELECT room_number FROM rooms");
-$rooms = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$rooms = [];
+if ($result) {
+    while ($row = $result->fetch_assoc()) {
+        $rooms[] = $row;
+    }
+}
 
 echo json_encode($rooms);
+
+$conn->close();
 ?>
