@@ -15,6 +15,8 @@ if ($startDate && $endDate) {
     $query .= " AND DATE(usage_date) <= '$endDate'";
 }
 
+$query .= " ORDER BY date DESC, id DESC";
+
 $result = $conn->query($query);
 
 $borrowRequests = [];

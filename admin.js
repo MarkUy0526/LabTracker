@@ -1467,6 +1467,11 @@ function toNonNegativeInt(value) {
   return num;
 }
 
+function hasNegativeQuantity(values) {
+  return ['totalQty', 'workingQty', 'notWorkingQty', 'maintenanceQty']
+    .some(key => String(values[key] ?? '').trim().startsWith('-'));
+}
+
 function validateInventoryValues(values, requireId = false) {
   const equipmentID = (values.equipmentID || '').trim();
   const equipmentName = (values.equipmentName || '').trim();
@@ -1479,11 +1484,15 @@ function validateInventoryValues(values, requireId = false) {
   if (requireId && !equipmentID) return { valid: false, message: 'Equipment ID is required.' };
   if (!equipmentName) return { valid: false, message: 'Equipment Name is required.' };
   if (!accountablePerson) return { valid: false, message: 'Accountable Person is required.' };
-  if (totalQty === null || workingQty === null || notWorkingQty === null || maintenanceQty === null) {
-    return { valid: false, message: 'Total, Working, Non-working, and Maintenance must be whole numbers.' };
+  if (hasNegativeQuantity(values)) {
+    return { valid: false, message: 'Equipment quantity cannot be less than zero.' };
   }
+  if (totalQty === null || workingQty === null || notWorkingQty === null || maintenanceQty === null) {
+    return { valid: false, message: 'Total, Working, Non-working, and Maintenance must be whole numbers with no decimals.' };
+  }
+  if (totalQty <= 0) return { valid: false, message: 'Total quantity must be greater than zero.' };
   if ((workingQty + notWorkingQty + maintenanceQty) !== totalQty) {
-    return { valid: false, message: 'Working + Non-working + Maintenance must equal Total Qty.' };
+    return { valid: false, message: 'Working, Non-working, and Maintenance quantities must add up exactly to Total Qty.' };
   }
   if (workingQty === 0 && notWorkingQty === 0 && maintenanceQty === 0) {
     return { valid: false, message: 'Select at least one condition count.' };
@@ -1650,6 +1659,59 @@ function updateAddEquipmentSaveState() {
   if (submitBtn) {
     submitBtn.title = duplicate ? 'Equipment ID already exists.' : (validation.valid ? '' : validation.message);
   }
+}
+
+function generateNextEquipmentId(categoryCode = 'E') {
+  const prefix = String(categoryCode || 'E').toUpperCase();
+  let maxNumber = 0;
+
+  currentEquipmentIDs.forEach(id => {
+    const match = String(id || '').toUpperCase().match(new RegExp('^' + prefix + '-(\\d+)$'));
+    if (match) maxNumber = Math.max(maxNumber, parseInt(match[1], 10) || 0);
+  });
+
+  return `${prefix}-${String(maxNumber + 1).padStart(3, '0')}`;
+}
+
+function refreshGeneratedEquipmentId() {
+  const category = document.getElementById('equipmentCategory')?.value || 'E';
+  const idInput = document.getElementById('equipmentID');
+  if (idInput) idInput.value = generateNextEquipmentId(category);
+  updateAddEquipmentSaveState();
+}
+
+function resetAddEquipmentImagePreview() {
+  const input = document.getElementById('addEquipmentImage');
+  const preview = document.getElementById('addEquipmentImagePreview');
+  if (input) input.value = '';
+  if (preview) {
+    preview.innerHTML = 'No image';
+    preview.style.backgroundImage = '';
+  }
+}
+
+function handleAddEquipmentImagePreview() {
+  const input = document.getElementById('addEquipmentImage');
+  const preview = document.getElementById('addEquipmentImagePreview');
+  if (!input || !preview || !input.files || !input.files[0]) return;
+
+  const file = input.files[0];
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    alert('Only JPG, PNG, and WebP images are allowed.');
+    resetAddEquipmentImagePreview();
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    alert('Equipment image must be under 5MB.');
+    resetAddEquipmentImagePreview();
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    preview.innerHTML = `<img src="${e.target.result}" alt="Equipment preview" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+  };
+  reader.readAsDataURL(file);
 }
 
 function removeStickyBar() {
@@ -2116,6 +2178,111 @@ function buildPdfSignatoriesSection() {
     </div>
   `;
 }
+
+let mostBorrowedEquipmentData = [];
+
+function loadMostBorrowedEquipment() {
+  fetch('get_most_borrowed.php')
+    .then(r => r.json())
+    .then(res => {
+      const table = document.getElementById('mostBorrowedTable');
+      const tbody = document.getElementById('mostBorrowedBody');
+      if (!tbody) return;
+
+      if (table?.tHead?.rows?.[0]) {
+        table.tHead.rows[0].innerHTML = `
+          <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:40px;">Rank</th>
+          <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:600;color:var(--text-3);">Equipment</th>
+          <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:90px;">Borrow Freq.</th>
+          <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:90px;">Inventory</th>
+          <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:90px;">Available</th>
+          <th style="padding:8px 10px;text-align:center;font-size:10px;font-weight:600;color:var(--text-3);width:110px;">Last Borrow</th>`;
+      }
+
+      if (!res.success) {
+        tbody.innerHTML = `<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--danger);">${escHtml(res.message || 'Unable to load most borrowed equipment.')}</td></tr>`;
+        mostBorrowedEquipmentData = [];
+        return;
+      }
+
+      mostBorrowedEquipmentData = Array.isArray(res.data) ? res.data : [];
+      if (!mostBorrowedEquipmentData.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--text-3);">No equipment records found.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = mostBorrowedEquipmentData.map(item => `
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 10px;text-align:center;">${item.rank}</td>
+          <td style="padding:8px 10px;text-align:left;">${escHtml(item.equipment_name)}</td>
+          <td style="padding:8px 10px;text-align:center;">${item.borrow_frequency}</td>
+          <td style="padding:8px 10px;text-align:center;">${item.total_inventory_count}</td>
+          <td style="padding:8px 10px;text-align:center;">${item.current_availability}</td>
+          <td style="padding:8px 10px;text-align:center;">${item.last_borrow_date ? formatDateToDDMMYYYY(item.last_borrow_date) : '-'}</td>
+        </tr>
+      `).join('');
+    })
+    .catch(err => {
+      console.error('Error loading most borrowed equipment:', err);
+      const tbody = document.getElementById('mostBorrowedBody');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--danger);">Unable to load most borrowed equipment.</td></tr>';
+    });
+}
+
+function exportMostBorrowedEquipmentPdf() {
+  if (!mostBorrowedEquipmentData.length) {
+    alert('No most borrowed equipment data is available to export.');
+    return;
+  }
+
+  const rows = mostBorrowedEquipmentData.map(item => `
+    <tr>
+      <td style="border:1px solid #000;padding:6px;text-align:center;">${item.rank}</td>
+      <td style="border:1px solid #000;padding:6px;">${escHtml(item.equipment_name)}</td>
+      <td style="border:1px solid #000;padding:6px;text-align:center;">${item.borrow_frequency}</td>
+      <td style="border:1px solid #000;padding:6px;text-align:center;">${item.total_inventory_count}</td>
+      <td style="border:1px solid #000;padding:6px;text-align:center;">${item.current_availability}</td>
+      <td style="border:1px solid #000;padding:6px;text-align:center;">${item.last_borrow_date ? formatDateToDDMMYYYY(item.last_borrow_date) : '-'}</td>
+    </tr>
+  `).join('');
+
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = `
+    <div style="font-family:Arial,sans-serif;font-size:11px;padding:18px;color:#000;">
+      <div style="text-align:center;margin-bottom:16px;">
+        <h3 style="margin:3px 0;">EULOGIO "AMANG" RODRIGUEZ INSTITUTE OF SCIENCE AND TECHNOLOGY</h3>
+        <h3 style="margin:3px 0;">COLLEGE OF ARTS AND SCIENCES</h3>
+        <h3 style="margin:3px 0;">APPLIED PHYSICS DEPARTMENT</h3>
+        <h2 style="margin:10px 0;">Most Borrowed Equipment Audit Report</h2>
+        <div>Period: Last 6 months | Generated: ${escHtml(new Date().toLocaleString())}</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #000;">
+        <thead>
+          <tr style="background:#f0f0f0;">
+            <th style="border:1px solid #000;padding:6px;">Rank</th>
+            <th style="border:1px solid #000;padding:6px;text-align:left;">Most Borrowed Equipment</th>
+            <th style="border:1px solid #000;padding:6px;">Borrow Frequency</th>
+            <th style="border:1px solid #000;padding:6px;">Total Inventory Count</th>
+            <th style="border:1px solid #000;padding:6px;">Current Availability</th>
+            <th style="border:1px solid #000;padding:6px;">Last Borrow Date</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      ${buildPdfSignatoriesSection()}
+    </div>`;
+
+  html2pdf().set({
+    margin: [8, 8, 8, 8],
+    filename: `most-borrowed-equipment-${new Date().toISOString().slice(0, 10)}.pdf`,
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+  }).from(wrapper).save();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('exportMostBorrowedPdfBtn')?.addEventListener('click', exportMostBorrowedEquipmentPdf);
+});
 
 function applyReportsFilters(resetPage = false) {
   reportsState.filteredData = reportsState.data.filter(entry => {
@@ -2615,6 +2782,10 @@ document.addEventListener('DOMContentLoaded', () => {
     ['equipmentID','equipmentName','serialNumber','internalSN',
      'accountablePerson','totalQty','workingQty','notWorkingQty','maintenanceQty','description']
       .forEach(id => { document.getElementById(id).value = ''; });
+    const category = document.getElementById('equipmentCategory');
+    if (category) category.value = 'E';
+    refreshGeneratedEquipmentId();
+    resetAddEquipmentImagePreview();
     const maintenanceInput = document.getElementById('maintenanceQty');
     if (maintenanceInput) maintenanceInput.value = '0';
     const borrowingStatus = document.getElementById('borrowingStatus');
@@ -2650,6 +2821,8 @@ document.addEventListener('DOMContentLoaded', () => {
       el.addEventListener('input', updateAddEquipmentSaveState);
       el.addEventListener('change', updateAddEquipmentSaveState);
     });
+  document.getElementById('equipmentCategory')?.addEventListener('change', refreshGeneratedEquipmentId);
+  document.getElementById('addEquipmentImage')?.addEventListener('change', handleAddEquipmentImagePreview);
   updateAddEquipmentSaveState();
 
   document.getElementById('submitEquipmentBtn').onclick = function(e) {
@@ -2681,11 +2854,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (!confirmRiskyInventoryUpdate(0, validation.notWorkingQty)) return;
 
+    const imageInput = document.getElementById('addEquipmentImage');
+    const formData = new FormData();
+    formData.append('equipmentID', equipmentID);
+    formData.append('equipmentName', equipmentName);
+    formData.append('serialNumber', serialNumber);
+    formData.append('internalSN', internalSN);
+    formData.append('totalQty', totalQty);
+    formData.append('workingQty', workingQty);
+    formData.append('notWorkingQty', notWorkingQty);
+    formData.append('maintenanceQty', maintenanceQty);
+    formData.append('description', description);
+    formData.append('accountablePerson', accountablePerson);
+    formData.append('isBorrowable', isBorrowable);
+    if (imageInput && imageInput.files && imageInput.files[0]) {
+      formData.append('equipment_image', imageInput.files[0]);
+    }
+
     $.ajax({
       url: 'add_equipment.php', method: 'POST',
-      data: { equipmentID, equipmentName, serialNumber, internalSN,
-              totalQty, workingQty, notWorkingQty, maintenanceQty, description, accountablePerson, isBorrowable },
-      // FIX: removed dataType:'json' to avoid false error triggers
+      data: formData,
+      processData: false,
+      contentType: false,
       success: function(rawData) {
         let data;
         try { data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData; }
@@ -2704,6 +2894,7 @@ document.addEventListener('DOMContentLoaded', () => {
             not_working_qty: notWorkingQty,
             account_person:  accountablePerson
           }, 'Added');
+          currentEquipmentIDs.add(equipmentID);
 
           selectedRow = null; selectedItemData = null;
           ['equipmentID','equipmentName','serialNumber','internalSN','totalQty',
@@ -2711,10 +2902,14 @@ document.addEventListener('DOMContentLoaded', () => {
             .forEach(id => { document.getElementById(id).value = ''; });
           const borrowingStatus = document.getElementById('borrowingStatus');
           if (borrowingStatus) borrowingStatus.value = '1';
+          const category = document.getElementById('equipmentCategory');
+          if (category) category.value = 'E';
+          resetAddEquipmentImagePreview();
 
           // FIX 3: reload inventory immediately so new equipment shows without page refresh
           loadInventory();
           loadInventoryPreview();
+          refreshGeneratedEquipmentId();
           updateAddEquipmentSaveState();
         } else {
           alert('Error: ' + (data.message || 'Unknown error'));
@@ -3684,13 +3879,17 @@ function attachActionHandlers() {
   document.querySelectorAll('.accept-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (confirm('Are you sure you want to ACCEPT this borrow request?'))
-        addToReports(btn.dataset.id, 'Approved').then(() => { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); });
+        addToReports(btn.dataset.id, 'Approved').then(res => {
+          if (res?.success) { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); }
+        });
     });
   });
   document.querySelectorAll('.reject-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (confirm('Are you sure you want to REJECT this borrow request?'))
-        addToReports(btn.dataset.id, 'Denied').then(() => { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); });
+        addToReports(btn.dataset.id, 'Denied').then(res => {
+          if (res?.success) { refreshCalendarStats(); loadBorrowRequestsAndUpdateCount(); }
+        });
     });
   });
   document.querySelectorAll('.view-request-btn').forEach(btn => {
@@ -3766,13 +3965,20 @@ function addToReports(id, status) {
   })
   .then(r => r.json())
   .then(res => {
-    if (!res.success) console.warn('Status update failed:', res.message);
+    if (!res.success) {
+      alert(res.message || 'Unable to update this borrow request. Please refresh the list and try again.');
+      console.warn('Status update failed:', res.message);
+    }
     if (res.success && document.getElementById('reportsSection')?.style.display !== 'none') {
       loadReports({ keepPage: true });
     }
     return res;
   })
-  .catch(err => console.error('addToReports error:', err));
+  .catch(err => {
+    console.error('addToReports error:', err);
+    alert('Unable to update this borrow request because the server did not respond. Please check your connection and try again.');
+    return { success: false, message: err.message };
+  });
 }
 
 // ════════════════════════════════════════════════════════════════

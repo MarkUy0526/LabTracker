@@ -874,7 +874,10 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
         <!-- Most Borrowed Equipment Panel -->
         <div id="mostBorrowedSection" style="margin-top:24px;">
           <div class="card">
-            <h2 style="font-size:15px;font-weight:600;margin-bottom:12px;color:var(--text-1);">Most Borrowed Equipment</h2>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+              <h2 style="font-size:15px;font-weight:600;margin:0;color:var(--text-1);">Most Borrowed Equipment</h2>
+              <button id="exportMostBorrowedPdfBtn" type="button" class="primary" style="font-size:12px;padding:6px 12px;">Export PDF</button>
+            </div>
             <p style="font-size:12px;color:var(--text-3);margin-bottom:12px;">Based on last 6 months of borrowing requests</p>
             <div style="max-height:320px;overflow-y:auto;">
               <table style="width:100%;font-size:12px;" id="mostBorrowedTable">
@@ -1138,8 +1141,22 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
     <div class="modal-content" style="position:relative;max-width:500px;">
       <span class="close" onclick="closeAddEquipmentModal()">&times;</span>
       <h2 id="equipmentModalTitle">Add Equipment</h2>
+      <div style="border:1px solid var(--border);background:var(--bg);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--text-2);line-height:1.45;">
+        <strong>Equipment ID Legend:</strong>
+        <span style="margin-left:6px;">E = Equipment</span>
+        <span style="margin-left:10px;">M = Measuring Tools</span>
+        <span style="margin-left:10px;">C = Chemicals</span>
+        <span style="margin-left:10px;">B = Books</span>
+      </div>
+      <label>Category</label>
+      <select id="equipmentCategory">
+        <option value="E">Equipment</option>
+        <option value="M">Measuring Tools</option>
+        <option value="C">Chemicals</option>
+        <option value="B">Books</option>
+      </select>
       <label>Equipment ID</label>
-      <input type="text" id="equipmentID" required />
+      <input type="text" id="equipmentID" readonly required />
       <label>Equipment Name</label>
       <input type="text" id="equipmentName" required />
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
@@ -1154,10 +1171,18 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
         <option value="0">Restricted / Hidden from Borrower Side</option>
       </select>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
-        <div><label>Total Qty</label><input type="number" id="totalQty" /></div>
-        <div><label>Working</label><input type="number" id="workingQty" /></div>
-        <div><label>Not Working</label><input type="number" id="notWorkingQty" /></div>
-        <div><label>Maintenance</label><input type="number" id="maintenanceQty" /></div>
+        <div><label>Total Qty</label><input type="number" id="totalQty" min="0" step="1" /></div>
+        <div><label>Working</label><input type="number" id="workingQty" min="0" step="1" /></div>
+        <div><label>Not Working</label><input type="number" id="notWorkingQty" min="0" step="1" /></div>
+        <div><label>Maintenance</label><input type="number" id="maintenanceQty" min="0" step="1" /></div>
+      </div>
+      <label>Equipment Image</label>
+      <div style="display:flex;align-items:center;gap:12px;border:1px dashed var(--border);border-radius:var(--radius);padding:10px;background:var(--bg);">
+        <div id="addEquipmentImagePreview" style="width:64px;height:64px;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:12px;text-align:center;">No image</div>
+        <div style="flex:1;">
+          <input type="file" id="addEquipmentImage" accept="image/png,image/jpeg,image/webp" />
+          <div style="font-size:11px;color:var(--text-3);margin-top:4px;">JPG, PNG, or WebP. Max 5MB.</div>
+        </div>
       </div>
       <label>Description</label>
       <textarea id="description"></textarea>
