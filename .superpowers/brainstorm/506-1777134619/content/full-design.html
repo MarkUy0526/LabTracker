@@ -1,0 +1,85 @@
+<h2>Full Design: Monthly Borrowing Trend Refactor</h2>
+<p class="subtitle">Complete mockup of the refactored chart card with date range and status filters.</p>
+
+<div class="mockup">
+  <div class="mockup-header">admin.php — Chart Card (refactored)</div>
+  <div class="mockup-body" style="padding:16px;">
+
+    <div style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:16px;">
+
+      <!-- Card header + filters -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+        <p style="font-size:13px;font-weight:600;color:#e2e8f0;margin:0;">Monthly Borrowing Trend</p>
+
+        <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;">
+          <!-- From -->
+          <div>
+            <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin-bottom:3px;">From</label>
+            <input type="date" value="2025-04-01" style="font-size:12px;padding:6px 10px;border:1px solid #334155;border-radius:4px;background:#0f172a;color:#e2e8f0;outline:none;">
+          </div>
+          <div style="padding-bottom:8px;color:#475569;font-size:13px;">→</div>
+          <!-- To -->
+          <div>
+            <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin-bottom:3px;">To</label>
+            <input type="date" value="2025-04-26" style="font-size:12px;padding:6px 10px;border:1px solid #334155;border-radius:4px;background:#0f172a;color:#e2e8f0;outline:none;">
+          </div>
+          <!-- Status -->
+          <div>
+            <label style="display:block;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin-bottom:3px;">Status</label>
+            <select style="font-size:12px;padding:6px 10px;border:1px solid #334155;border-radius:4px;background:#0f172a;color:#e2e8f0;outline:none;">
+              <option>All</option>
+              <option>Accepted</option>
+              <option>Pending</option>
+              <option>Rejected</option>
+            </select>
+          </div>
+          <!-- Filter button -->
+          <div>
+            <button style="background:#6366f1;color:#fff;border:1px solid #6366f1;border-radius:4px;padding:6px 14px;font-size:12px;cursor:pointer;">Filter</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Simulated line chart -->
+      <div style="height:220px;background:#0f172a;border-radius:6px;border:1px solid #1e293b;display:flex;flex-direction:column;justify-content:flex-end;padding:12px 16px 28px;position:relative;">
+        <div style="position:absolute;left:6px;top:50%;transform:translateY(-50%) rotate(-90deg);font-size:9px;color:#475569;white-space:nowrap;">No. of Requests</div>
+        <svg width="100%" height="160" style="overflow:visible;">
+          <!-- grid lines -->
+          <line x1="0" y1="0"   x2="100%" y2="0"   stroke="#1e293b" stroke-width="1"/>
+          <line x1="0" y1="40"  x2="100%" y2="40"  stroke="#1e293b" stroke-width="1"/>
+          <line x1="0" y1="80"  x2="100%" y2="80"  stroke="#1e293b" stroke-width="1"/>
+          <line x1="0" y1="120" x2="100%" y2="120" stroke="#1e293b" stroke-width="1"/>
+          <line x1="0" y1="160" x2="100%" y2="160" stroke="#334155" stroke-width="1"/>
+          <!-- line -->
+          <polyline points="0,145 30,130 60,100 90,120 120,70 150,95 180,55 210,80 240,60 270,100 300,40 330,65 360,85 390,55 420,45 450,75" fill="none" stroke="#6366f1" stroke-width="2.5"/>
+          <!-- dots -->
+          <circle cx="0" cy="145" r="3" fill="#6366f1"/><circle cx="60" cy="100" r="3" fill="#6366f1"/>
+          <circle cx="120" cy="70" r="3" fill="#6366f1"/><circle cx="180" cy="55" r="3" fill="#6366f1"/>
+          <circle cx="240" cy="60" r="3" fill="#6366f1"/><circle cx="300" cy="40" r="3" fill="#6366f1"/>
+          <circle cx="360" cy="85" r="3" fill="#6366f1"/><circle cx="420" cy="45" r="3" fill="#6366f1"/>
+        </svg>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;">
+          <span style="font-size:9px;color:#475569;">Apr 1</span>
+          <span style="font-size:9px;color:#475569;">Apr 5</span>
+          <span style="font-size:9px;color:#475569;">Apr 10</span>
+          <span style="font-size:9px;color:#475569;">Apr 15</span>
+          <span style="font-size:9px;color:#475569;">Apr 20</span>
+          <span style="font-size:9px;color:#475569;">Apr 26</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>Behavior summary</h3>
+  <ul style="color:#94a3b8;font-size:13px;line-height:2;">
+    <li><strong style="color:#e2e8f0;">Default on load:</strong> From = 1st of current month · To = today · Status = All</li>
+    <li><strong style="color:#e2e8f0;">X-axis:</strong> One point per day in range (e.g. "Apr 1", "Apr 2"…)</li>
+    <li><strong style="color:#e2e8f0;">Y-axis:</strong> Count of borrow requests on that day</li>
+    <li><strong style="color:#e2e8f0;">Filter button:</strong> Destroys old chart, fetches new data, re-renders</li>
+    <li><strong style="color:#e2e8f0;">Status = All:</strong> Counts all requests regardless of status</li>
+    <li><strong style="color:#e2e8f0;">No data:</strong> Chart shows "No data for selected range" message</li>
+  </ul>
+</div>

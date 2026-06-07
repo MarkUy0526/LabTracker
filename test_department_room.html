@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Department-Room Select Test</title>
+    <style>
+        :root {
+            --accent: #2d9d78;
+            --accent-soft: rgba(45, 157, 120, 0.12);
+            --border: #dcdcdc;
+            --surface: #fff;
+            --surface-2: #f5f5f5;
+            --text-1: #1a1a18;
+            --text-2: #3a3a38;
+            --text-3: #79796e;
+            --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", sans-serif;
+            --transition: 0.28s ease;
+            --radius: 8px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font);
+            background: var(--surface-2);
+            padding: 40px;
+            color: var(--text-1);
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: var(--surface);
+            padding: 30px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: var(--text-3);
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-3);
+            margin-bottom: 8px;
+        }
+
+        select, input[type="text"] {
+            width: 100%;
+            padding: 10px 12px;
+            font-family: var(--font);
+            font-size: 14px;
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface);
+            color: var(--text-1);
+            transition: border-color 0.28s ease, opacity 0.28s ease, background-color 0.28s ease, color 0.28s ease;
+        }
+
+        select:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+        }
+
+        select:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: var(--surface-2);
+            color: var(--text-3);
+            border-color: var(--border);
+        }
+
+        select:not(:disabled) {
+            cursor: pointer;
+            border-color: var(--accent);
+        }
+
+        input[type="text"] {
+            display: none;
+        }
+
+        input[type="text"].show {
+            display: block;
+        }
+
+        input[type="text"]:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        @media (max-width: 600px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .info-box {
+            background: var(--accent-soft);
+            border-left: 3px solid var(--accent);
+            padding: 12px 16px;
+            border-radius: var(--radius);
+            margin-bottom: 24px;
+            font-size: 13px;
+            color: var(--text-2);
+        }
+
+        .status-output {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-top: 24px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        .status-label {
+            color: var(--text-3);
+            font-weight: 600;
+            margin-top: 8px;
+            margin-bottom: 4px;
+        }
+
+        .status-value {
+            color: var(--accent);
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📋 Department-Room Select Test</h1>
+        <p class="subtitle">Test the conditional room selection based on department choice</p>
+
+        <div class="info-box">
+            ✅ Try selecting a department to enable the room select. Try "Others" to see a text input instead.
+        </div>
+
+        <form id="testForm">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="departmentSelect">Department</label>
+                    <select id="departmentSelect">
+                        <option value="" disabled selected>Select a department</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="roomSelect">Room</label>
+                    <select id="roomSelect" disabled>
+                        <option value="" disabled selected>Select a department first</option>
+                    </select>
+                    <input type="text" id="roomCustomInput" placeholder="Enter your room">
+                </div>
+            </div>
+        </form>
+
+        <div class="status-output">
+            <div class="status-label">Current Status:</div>
+            <div id="status">
+                <p><strong>Department:</strong> <span class="status-value" id="statusDept">Not selected</span></p>
+                <p><strong>Room:</strong> <span class="status-value" id="statusRoom">Not selected</span></p>
+                <p><strong>Room Input Type:</strong> <span class="status-value" id="statusType">Select (disabled)</span></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Department to Room Mapping
+        const DEPARTMENT_ROOM_MAP = {
+            'CAS': ['Room 407', 'Room 411'],
+            'Engineering': ['Lab A', 'Lab B', 'Lab C'],
+            'Science': ['Room 201', 'Room 202', 'Room 203'],
+            'Business': ['Room 501', 'Room 502'],
+            'Others': null  // Triggers text input instead of select
+        };
+
+        function initDepartmentRoomSelect() {
+            const deptSelect = document.getElementById('departmentSelect');
+            const roomSelect = document.getElementById('roomSelect');
+            const roomCustom = document.getElementById('roomCustomInput');
+
+            if (!deptSelect || !roomSelect) return;
+
+            // Populate department select with options
+            Object.keys(DEPARTMENT_ROOM_MAP).forEach(dept => {
+                const option = document.createElement('option');
+                option.value = dept;
+                option.textContent = dept;
+                deptSelect.appendChild(option);
+            });
+
+            // Handle department change
+            deptSelect.addEventListener('change', function () {
+                const selectedDept = this.value;
+                updateStatus(); // Update status in real-time
+
+                if (!selectedDept) {
+                    // Department cleared
+                    roomSelect.disabled = true;
+                    roomSelect.value = '';
+                    roomSelect.innerHTML = '<option value="" disabled selected>Select a department first</option>';
+                    roomCustom.classList.remove('show');
+                    roomCustom.value = '';
+                    roomCustom.disabled = true;
+                    updateStatus();
+                    return;
+                }
+
+                const rooms = DEPARTMENT_ROOM_MAP[selectedDept];
+
+                if (selectedDept === 'Others') {
+                    // Show custom text input for "Others"
+                    roomSelect.style.display = 'none';
+                    roomSelect.disabled = true;
+                    roomCustom.classList.add('show');
+                    roomCustom.disabled = false;
+                    roomCustom.value = '';
+                    roomCustom.focus();
+                } else {
+                    // Show room select with options
+                    roomSelect.style.display = 'block';
+                    roomSelect.disabled = false;
+                    roomCustom.classList.remove('show');
+                    roomCustom.disabled = true;
+                    roomCustom.value = '';
+
+                    // Populate room options
+                    roomSelect.innerHTML = '<option value="" disabled selected>Select a room</option>';
+                    if (rooms && Array.isArray(rooms)) {
+                        rooms.forEach(room => {
+                            const option = document.createElement('option');
+                            option.value = room;
+                            option.textContent = room;
+                            roomSelect.appendChild(option);
+                        });
+                    }
+                }
+                updateStatus();
+            });
+
+            // Handle room select change
+            roomSelect.addEventListener('change', function () {
+                updateStatus();
+            });
+
+            // Handle custom input
+            roomCustom.addEventListener('input', function () {
+                updateStatus();
+            });
+        }
+
+        function updateStatus() {
+            const deptSelect = document.getElementById('departmentSelect');
+            const roomSelect = document.getElementById('roomSelect');
+            const roomCustom = document.getElementById('roomCustomInput');
+
+            const dept = deptSelect.value || 'Not selected';
+            const isCustom = roomCustom.classList.contains('show');
+            const room = isCustom ? (roomCustom.value || 'Not entered') : (roomSelect.value || 'Not selected');
+            const type = isCustom ? 'Text Input' : (roomSelect.disabled ? 'Select (disabled)' : 'Select');
+
+            document.getElementById('statusDept').textContent = dept;
+            document.getElementById('statusRoom').textContent = room;
+            document.getElementById('statusType').textContent = type;
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initDepartmentRoomSelect();
+            updateStatus();
+        });
+    </script>
+</body>
+</html>
