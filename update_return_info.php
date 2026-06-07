@@ -10,8 +10,13 @@ ensureReturnPhotoColumns($conn);
 
 $data = json_decode(file_get_contents("php://input"), true);
 
-if (!isset($data['borrow_request_id'], $data['returned_items'])) {
-    echo json_encode(["success" => false, "message" => "Invalid input"]);
+if (!is_array($data) || !isset($data['borrow_request_id'], $data['returned_items']) || !is_array($data['returned_items'])) {
+    echo json_encode(["success" => false, "message" => "Borrow request ID and returned item details are required before saving return verification."]);
+    exit;
+}
+
+if (count($data['returned_items']) === 0) {
+    echo json_encode(["success" => false, "message" => "At least one returned equipment item is required before saving return verification."]);
     exit;
 }
 
@@ -25,7 +30,7 @@ $requestStmt->execute();
 $request = $requestStmt->get_result()->fetch_assoc();
 
 if (!$request) {
-    echo json_encode(["success" => false, "message" => "Borrow request not found"]);
+    echo json_encode(["success" => false, "message" => "Borrow request #$borrowRequestId was not found. Please refresh the reports page and try again."]);
     exit;
 }
 
@@ -61,16 +66,19 @@ $updateAvailableStmt = $conn->prepare("
 ");
 
 if (!$updateStmt || !$getQtyStmt || !$updateAvailableStmt) {
-    echo json_encode(["success" => false, "message" => "Prepare failed: " . $conn->error]);
+    echo json_encode(["success" => false, "message" => "Unable to save return verification because the database update could not be prepared. Please contact the administrator."]);
     exit;
 }
 
 try {
     $submittedReturnItems = [];
     foreach ($data['returned_items'] as $item) {
-        $equipmentName = $item['equipment_name'];
-        $returnedOn = $item['returned_on'];
-        $remarks = $item['remarks'];
+        $equipmentName = trim((string)($item['equipment_name'] ?? ''));
+        $returnedOn = trim((string)($item['returned_on'] ?? ''));
+        $remarks = trim((string)($item['remarks'] ?? ''));
+        if ($equipmentName === '') {
+            throw new Exception("One returned item is missing its equipment name. Please refresh the reports page and try again.");
+        }
         $submittedReturnItems[] = [
             'equipment_name' => $equipmentName,
             'returned_on' => $returnedOn,
@@ -86,7 +94,7 @@ try {
             $equipmentName
         );
         if (!$updateStmt->execute()) {
-            throw new Exception("Execute failed: " . $updateStmt->error);
+            throw new Exception("Unable to save return details for '$equipmentName': " . $updateStmt->error);
         }
 
         if ($shouldRestoreInventory) {
@@ -98,7 +106,7 @@ try {
 
                 $updateAvailableStmt->bind_param("is", $qtyBorrowed, $equipmentName);
                 if (!$updateAvailableStmt->execute()) {
-                    throw new Exception("Update available failed: " . $updateAvailableStmt->error);
+                    throw new Exception("Unable to restore inventory quantity for '$equipmentName': " . $updateAvailableStmt->error);
                 }
             }
         }
@@ -116,6 +124,9 @@ try {
         WHERE id = ?
     ";
     $updateRequestStmt = $conn->prepare($updateRequestSql);
+    if (!$updateRequestStmt) {
+        throw new Exception("Unable to update the return verification status for request #$borrowRequestId. Please contact the administrator.");
+    }
     $returnStatusValue = $returnStatus ?? '';
     $restoredFlag = $shouldRestoreInventory ? 1 : 0;
     $updateRequestStmt->bind_param("sssissi", $verificationStatus, $verificationNotes, $verificationNotes, $restoredFlag, $returnStatusValue, $returnStatusValue, $borrowRequestId);

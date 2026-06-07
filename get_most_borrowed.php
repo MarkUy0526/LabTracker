@@ -15,16 +15,27 @@ try {
 
   $query = "
     SELECT
-      be.equipment_name,
-      COUNT(br.id) as borrow_frequency,
-      SUM(be.quantity) as total_qty_borrowed
-    FROM borrow_requests br
-    JOIN borrowed_equipment be ON br.id = be.borrow_request_id
-    WHERE br.status = 'Approved'
-      AND br.date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-    GROUP BY be.equipment_name
-    ORDER BY borrow_frequency DESC, total_qty_borrowed DESC
-    LIMIT 10
+      e.equipment_id,
+      e.equipment_name,
+      e.total_qty,
+      e.available,
+      COALESCE(stats.borrow_frequency, 0) AS borrow_frequency,
+      COALESCE(stats.total_qty_borrowed, 0) AS total_qty_borrowed,
+      stats.last_borrow_date
+    FROM equipment e
+    LEFT JOIN (
+      SELECT
+        be.equipment_name,
+        COUNT(br.id) AS borrow_frequency,
+        COALESCE(SUM(be.quantity), 0) AS total_qty_borrowed,
+        MAX(br.date) AS last_borrow_date
+      FROM borrow_requests br
+      JOIN borrowed_equipment be ON br.id = be.borrow_request_id
+      WHERE br.status = 'Approved'
+        AND br.date >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+      GROUP BY be.equipment_name
+    ) stats ON stats.equipment_name = e.equipment_name
+    ORDER BY borrow_frequency DESC, total_qty_borrowed DESC, e.equipment_name ASC
   ";
 
   $result = $conn->query($query);
@@ -38,9 +49,13 @@ try {
   while ($row = $result->fetch_assoc()) {
     $equipment[] = [
       'rank' => $rank++,
+      'equipment_id' => $row['equipment_id'],
       'equipment_name' => $row['equipment_name'],
       'borrow_frequency' => (int)$row['borrow_frequency'],
-      'total_qty_borrowed' => (int)$row['total_qty_borrowed']
+      'total_qty_borrowed' => (int)$row['total_qty_borrowed'],
+      'total_inventory_count' => (int)$row['total_qty'],
+      'current_availability' => (int)$row['available'],
+      'last_borrow_date' => $row['last_borrow_date']
     ];
   }
 

@@ -15,7 +15,7 @@ $accountablePerson = trim($_POST['accountablePerson'] ?? '');
 $isBorrowable      = parseBorrowableFlag($_POST['isBorrowable'] ?? '1');
 
 if ($equipmentID === '' || $equipmentName === '' || $accountablePerson === '') {
-    echo json_encode(["success" => false, "message" => "Missing required fields."]);
+    echo json_encode(["success" => false, "message" => "Equipment ID, Equipment Name, and Accountable Person are required."]);
     exit;
 }
 
@@ -45,7 +45,7 @@ $stmt = $conn->prepare(
 );
 
 if (!$stmt) {
-    echo json_encode(["success" => false, "message" => "Prepare failed: " . $conn->error]);
+    echo json_encode(["success" => false, "message" => "Unable to save equipment details because the database update could not be prepared. Please contact the administrator."]);
     $conn->close();
     exit;
 }
@@ -64,7 +64,7 @@ $stmt->bind_param(
 );
 
 if (!$stmt->execute()) {
-    echo json_encode(["success" => false, "message" => "Error: " . $stmt->error]);
+    echo json_encode(["success" => false, "message" => "Unable to save equipment details for $equipmentID: " . $stmt->error]);
     $stmt->close();
     $conn->close();
     exit;
@@ -148,7 +148,7 @@ if (!empty($_FILES['equipment_image']['name'])) {
     }
 
     if ($file['error'] !== UPLOAD_ERR_OK) {
-        echo json_encode(["success" => false, "message" => "Upload error: " . $file['error']]);
+        echo json_encode(["success" => false, "message" => "Equipment image upload failed. Please choose the image again and retry. Upload error code: " . $file['error']]);
         $conn->close();
         exit;
     }
@@ -169,7 +169,7 @@ if (!empty($_FILES['equipment_image']['name'])) {
 
     $imagePath = $imageDir . '/' . $equipmentID . '.' . $ext;
     if (!move_uploaded_file($file['tmp_name'], $imagePath)) {
-        echo json_encode(["success" => false, "message" => "Failed to save image."]);
+        echo json_encode(["success" => false, "message" => "Unable to save the equipment image. Please check the equipment_images folder permission."]);
         $conn->close();
         exit;
     }
