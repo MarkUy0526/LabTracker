@@ -107,8 +107,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     .header {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 12px;
       margin-bottom: 32px;
+    }
+
+    .header-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
     }
 
     .logo {
@@ -144,6 +152,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       font-size: 1.4rem;
       letter-spacing: -0.01em;
       color: var(--ink);
+    }
+
+    .page-back-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 38px;
+      padding: 9px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--white);
+      color: var(--ink);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.86rem;
+      font-weight: 700;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: background 0.2s, border-color 0.2s, color 0.2s, transform 0.2s;
+    }
+
+    .page-back-btn svg {
+      width: 16px;
+      height: 16px;
+      stroke: currentColor;
+      flex-shrink: 0;
+    }
+
+    .page-back-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(200,80,42,0.04);
+      transform: translateY(-1px);
     }
 
     .search-section {
@@ -423,6 +464,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     @media (max-width: 640px) {
       .container { padding: 20px 16px; }
+      .header { align-items: flex-start; }
       .search-form { flex-direction: column; }
       .form-group { min-width: auto; }
       .request-header { flex-direction: column; gap: 12px; }
@@ -436,16 +478,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <!-- Header -->
   <div class="header">
-    <div class="logo">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/>
-        <path d="M15 3h6v6"/><path d="M10 14 21 3"/>
+    <div class="header-main">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/>
+          <path d="M15 3h6v6"/><path d="M10 14 21 3"/>
+        </svg>
+      </div>
+      <div class="header-title">
+        <span class="header-label">Lab Equipment Tracker</span>
+        <span class="header-name">Request Status</span>
+      </div>
+    </div>
+    <a href="login.php" class="page-back-btn" aria-label="Back to login">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M19 12H5"/>
+        <path d="M12 19l-7-7 7-7"/>
       </svg>
-    </div>
-    <div class="header-title">
-      <span class="header-label">Lab Equipment Tracker</span>
-      <span class="header-name">Request Status</span>
-    </div>
+      <span>Back</span>
+    </a>
   </div>
 
   <!-- Search Section -->
